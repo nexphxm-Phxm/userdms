@@ -1306,6 +1306,15 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             return;
         }
         $botData['save_mode'] = !($botData['save_mode'] ?? false);
+        
+        // BUG FIX: When Save Mode is turned ON, clear the 'manage_auto_dm' admin
+        // state so that subsequent messages are captured by the save-mode handler
+        // (line ~440) instead of being intercepted by the manage_auto_dm handler
+        // (line ~413), which was causing "save message not working".
+        if ($botData['save_mode']) {
+            unset($botData['admin_states'][$userId]);
+        }
+        
         saveBotData($dataFile, $botData);
         $status = $botData['save_mode'] ? 'ON' : 'OFF';
         
@@ -1416,8 +1425,14 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         // AUTO DM MANAGEMENT BUTTON
         // ==========================================
         if ($data === 'adm_manage_auto_dm') {
-            $botData['admin_states'][$userId] = 'manage_auto_dm';
-            saveBotData($dataFile, $botData);
+            // BUG FIX: Only set manage_auto_dm state when Save Mode is OFF.
+            // If Save Mode is ON, we must NOT set this state, because it would
+            // intercept every subsequent message (treating it as a remove command)
+            // instead of allowing the save-mode handler to capture it.
+            if (!($botData['save_mode'] ?? false)) {
+                $botData['admin_states'][$userId] = 'manage_auto_dm';
+                saveBotData($dataFile, $botData);
+            }
             showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
             return;
         }
