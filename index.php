@@ -7,7 +7,7 @@
  */
 
 // ==========================================
-// 1. HARDCODED CONFIG - FRESH START
+// 1. HARDCODED CONFIG
 // ==========================================
 $botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
@@ -177,8 +177,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             }
             echo "</p>";
         }
+    } else {
+        echo "<hr><p style='color:red;'>⚠️ No Auto DM messages saved yet!</p>";
+        echo "<p>📌 <b>How to save messages:</b></p>";
+        echo "<ol>";
+        echo "<li>Click the link below to open the save.php page</li>";
+        echo "<li>Or use the Admin Panel → '💌 Manage Auto DM Messages'</li>";
+        echo "<li>Turn ON forwarding mode and forward messages to the bot</li>";
+        echo "</ol>";
     }
     
+    echo "<hr>";
+    echo "<p><strong>📌 Save Auto DM Messages:</strong></p>";
+    echo "<p><a href='save.php' target='_blank'>Open save.php to save messages</a></p>";
     echo "<hr>";
     echo "<p><strong>To set up webhook, use:</strong></p>";
     echo "<code>https://api.telegram.org/bot" . $botToken . "/setWebhook?url=" . (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] . "</code>";
@@ -332,7 +343,9 @@ function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
         return;
     }
     
-    foreach ($autoDmMessages as $msgData) {
+    foreach ($autoDmMessages as $index => $msgData) {
+        $success = false;
+        
         if ($msgData['type'] === 'copy') {
             // Copy forwarded message
             $response = sendTelegramRequest('copyMessage', [
@@ -341,113 +354,123 @@ function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
                 'message_id' => $msgData['message_id']
             ], $botToken);
             
-            // If copy fails, try to send as link
-            if (!$response || !isset($response['ok']) || $response['ok'] !== true) {
-                sendTelegramRequest('sendMessage', [
-                    'chat_id' => $chatId,
-                    'text' => "📌 Please check your saved messages. Message could not be copied.",
-                    'parse_mode' => 'HTML'
-                ], $botToken);
+            if ($response && isset($response['ok']) && $response['ok'] === true) {
+                $success = true;
+            } else {
+                // Log the error
+                error_log("Failed to copy message " . ($index + 1) . ": " . json_encode($response));
             }
         } else {
             // Send saved content
-            sendSavedMessage($chatId, $msgData, $botToken);
+            $success = sendSavedMessage($chatId, $msgData, $botToken);
         }
+        
+        // If failed, send a fallback message
+        if (!$success) {
+            sendTelegramRequest('sendMessage', [
+                'chat_id' => $chatId,
+                'text' => "⚠️ Message " . ($index + 1) . " could not be sent. Contact admin.",
+                'parse_mode' => 'HTML'
+            ], $botToken);
+        }
+        
         usleep(500000); // 0.5 second delay
     }
 }
 
 function sendSavedMessage($chatId, $data, $botToken) {
     if (isset($data['text'])) {
-        sendTelegramRequest('sendMessage', [
+        $response = sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => $data['text'],
             'parse_mode' => $data['parse_mode'] ?? 'HTML'
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['photo'])) {
-        sendTelegramRequest('sendPhoto', [
+        $response = sendTelegramRequest('sendPhoto', [
             'chat_id' => $chatId,
             'photo' => $data['photo'],
             'caption' => $data['caption'] ?? ''
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['video'])) {
-        sendTelegramRequest('sendVideo', [
+        $response = sendTelegramRequest('sendVideo', [
             'chat_id' => $chatId,
             'video' => $data['video'],
             'caption' => $data['caption'] ?? '',
             'has_spoiler' => $data['has_spoiler'] ?? false,
             'supports_streaming' => $data['supports_streaming'] ?? true
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['document'])) {
-        sendTelegramRequest('sendDocument', [
+        $response = sendTelegramRequest('sendDocument', [
             'chat_id' => $chatId,
             'document' => $data['document'],
             'caption' => $data['caption'] ?? ''
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['audio'])) {
-        sendTelegramRequest('sendAudio', [
+        $response = sendTelegramRequest('sendAudio', [
             'chat_id' => $chatId,
             'audio' => $data['audio'],
             'caption' => $data['caption'] ?? '',
             'performer' => $data['performer'] ?? '',
             'title' => $data['title'] ?? ''
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['voice'])) {
-        sendTelegramRequest('sendVoice', [
+        $response = sendTelegramRequest('sendVoice', [
             'chat_id' => $chatId,
             'voice' => $data['voice']
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['video_note'])) {
-        sendTelegramRequest('sendVideoNote', [
+        $response = sendTelegramRequest('sendVideoNote', [
             'chat_id' => $chatId,
             'video_note' => $data['video_note']
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['animation'])) {
-        sendTelegramRequest('sendAnimation', [
+        $response = sendTelegramRequest('sendAnimation', [
             'chat_id' => $chatId,
             'animation' => $data['animation'],
             'caption' => $data['caption'] ?? ''
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['sticker'])) {
-        sendTelegramRequest('sendSticker', [
+        $response = sendTelegramRequest('sendSticker', [
             'chat_id' => $chatId,
             'sticker' => $data['sticker']
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
     
     if (isset($data['poll'])) {
-        sendTelegramRequest('sendPoll', [
+        $response = sendTelegramRequest('sendPoll', [
             'chat_id' => $chatId,
             'question' => $data['poll']['question'],
             'options' => json_encode($data['poll']['options'])
         ], $botToken);
-        return;
+        return ($response && isset($response['ok']) && $response['ok'] === true);
     }
+    
+    return false;
 }
 
 // ==========================================
@@ -798,7 +821,7 @@ function removeAutoDmMessage($chatId, $userId, $text, &$botData, $dataFile, $bot
 }
 
 // ==========================================
-// 9. MESSAGE HANDLER (UPDATED - REMOVED VERIFICATION WELCOME)
+// 9. MESSAGE HANDLER (UPDATED)
 // ==========================================
 
 function applyPremiumEmojis($text, $premiumEmojis) {
@@ -1225,7 +1248,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // COMMAND HANDLERS
     // ==========================================
     
-    // /start command - REMOVED WELCOME MESSAGE, ONLY SHOWS CHANNEL BUTTONS
+    // /start command
     if (strpos($text, '/start') === 0) {
         $firstName = htmlspecialchars($message['from']['first_name'] ?? 'User');
         $lastName = isset($message['from']['last_name']) ? ' ' . htmlspecialchars($message['from']['last_name']) : '';
@@ -1266,10 +1289,9 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             }
         }
 
-        // Show only channel buttons, no welcome text
+        // Show only channel buttons
         $keyboard = buildKeyboardWithCustomButtons($channels, $welcomeButtons, $folderButtons, true);
         
-        // Send only the keyboard with a short message
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => "📌 Join the channels below and click Check Joined:",
@@ -1277,7 +1299,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             'reply_markup' => $keyboard
         ], $botToken);
 
-        // Notify admins about new user
         if (!$isExistingUser) {
             $date = date('Y-m-d H:i:s');
             $userMsg = $userJoinMsg;
