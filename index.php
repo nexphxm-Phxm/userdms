@@ -18,7 +18,7 @@
 // ==========================================
 // 1. HARDCODED CONFIG - FRESH START
 // ==========================================
-$botToken = "8924875631:AAHNwkdigSaAGpyYz9oWmYhH1dehvQguL3Y"; 
+$botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
 $defaultAdmin = "5157557268"; // Primary admin ID
 
