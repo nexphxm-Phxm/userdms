@@ -51,7 +51,7 @@ function createFreshData() {
         'welcome_buttons' => [],
         'processed_join_requests' => [],
         'pending_channel_forward' => [],
-        'auto_dm_messages' => [], // STORES SAVED MESSAGES
+        'auto_dm_messages' => [],
         'channel_invite_links' => [],
         'pending_edit_channel' => [],
         'current_folder' => '',
@@ -100,7 +100,7 @@ $userJoinMsg = $botData['user_join_msg'] ?? '';
 $verifiedUsers = $botData['verified_users'] ?? [];
 $forwardingMode = $botData['forwarding_mode'] ?? false;
 
-// Premium Emoji Configuration
+// Premium Emoji Configuration - ALL EMOJIS FROM YOUR PYTHON CODE
 $premiumEmojis = [
     '🔖' => '<tg-emoji emoji-id="6154668949549092628">🔖</tg-emoji>',
     '📌' => '<tg-emoji emoji-id="6154635564768300782">📌</tg-emoji>',
@@ -125,6 +125,9 @@ $premiumEmojis = [
     '✨' => '<tg-emoji emoji-id="5990073381720953601">✨</tg-emoji>',
     '💎' => '<tg-emoji emoji-id="5796262720495946957">💎</tg-emoji>',
     '✈️' => '<tg-emoji emoji-id="5325705326157113713">✈️</tg-emoji>',
+    // Extra emojis from your Python code
+    '🚦' => '<tg-emoji emoji-id="5262179768980443936">🚦</tg-emoji>',
+    '🚀' => '<tg-emoji emoji-id="5222075933468954340">🚀</tg-emoji>',
 ];
 
 // ==========================================
@@ -145,14 +148,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         foreach ($autoDmMessages as $index => $msg) {
             echo "<p>" . ($index + 1) . ". ";
             if ($msg['type'] === 'copy') {
-                echo "📋 Forwarded Message (will be sent as-is)";
+                echo "📋 Forwarded Message";
             } else {
                 $type = isset($msg['text']) ? 'Text' : 
                        (isset($msg['photo']) ? 'Photo' :
                        (isset($msg['video']) ? 'Video' :
                        (isset($msg['document']) ? 'Document/APK' :
                        (isset($msg['audio']) ? 'Audio' : 'Unknown'))));
-                echo "📎 " . $type . " Message";
+                echo "📎 " . $type;
             }
             echo "</p>";
         }
@@ -164,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo "<li>Click '💌 Manage Auto DM Messages'</li>";
         echo "<li>Click '🔄 Turn ON'</li>";
         echo "<li>Forward any message to @lose_recover_bot</li>";
-        echo "<li>Turn OFF when done</li>";
+        echo "<li>The message will be saved!</li>";
         echo "</ol>";
     }
     
@@ -203,7 +206,6 @@ exit;
 function saveForwardedMessage($message, &$botData, $dataFile) {
     $savedData = [];
     
-    // Check if it's a forwarded message (can copy directly)
     if (isset($message['forward_from_chat']) && isset($message['forward_from_message_id'])) {
         $savedData = [
             'type' => 'copy',
@@ -228,13 +230,11 @@ function saveForwardedMessage($message, &$botData, $dataFile) {
             $savedData = saveMessageContent($message);
         }
     } else {
-        // Direct message - save content
         $savedData = saveMessageContent($message);
     }
     
     $botData['auto_dm_messages'][] = $savedData;
     saveBotData($dataFile, $botData);
-    
     return $savedData;
 }
 
@@ -287,7 +287,7 @@ function saveMessageContent($message) {
 }
 
 // ==========================================
-// 5. SEND FUNCTIONS - FIXED
+// 5. SEND FUNCTIONS
 // ==========================================
 
 function sendSavedMessage($chatId, $data, $botToken) {
@@ -356,43 +356,27 @@ function sendSavedMessage($chatId, $data, $botToken) {
     return false;
 }
 
-// ==========================================
-// 6. SEND AUTO DM - FIXED
-// ==========================================
-
 function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
     if (empty($autoDmMessages)) {
-        // Send nothing if no messages saved
         return;
     }
     
     foreach ($autoDmMessages as $msgData) {
         if ($msgData['type'] === 'copy') {
-            // This sends the EXACT forwarded message (photo, video, APK, etc.)
             $response = sendTelegramRequest('copyMessage', [
                 'chat_id' => $chatId,
                 'from_chat_id' => $msgData['from_chat_id'],
                 'message_id' => $msgData['message_id']
             ], $botToken);
-            
-            // If copy fails, try to send as fallback
-            if (!$response || !isset($response['ok']) || $response['ok'] !== true) {
-                sendTelegramRequest('sendMessage', [
-                    'chat_id' => $chatId,
-                    'text' => "⚠️ A message could not be sent. Contact admin.",
-                    'parse_mode' => 'HTML'
-                ], $botToken);
-            }
         } else {
-            // Send saved content
             sendSavedMessage($chatId, $msgData, $botToken);
         }
-        usleep(500000); // 0.5 second delay
+        usleep(500000);
     }
 }
 
 // ==========================================
-// 7. MESSAGE HANDLER - REMOVED WELCOME MESSAGE
+// 6. MESSAGE HANDLER
 // ==========================================
 
 function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmMessages, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers, &$forwardingMode) {
@@ -431,17 +415,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             $reply = "✅ <b>Auto DM Message Saved!</b>\n\n";
             $reply .= "📌 Total messages: " . count($botData['auto_dm_messages']);
             
-            if ($savedData['type'] === 'copy') {
-                $reply .= "\n📌 Type: Forwarded Message (will be sent as-is)";
-            } else {
-                $type = isset($savedData['text']) ? 'Text' : 
-                       (isset($savedData['photo']) ? 'Photo' :
-                       (isset($savedData['video']) ? 'Video' :
-                       (isset($savedData['document']) ? 'Document/APK' :
-                       (isset($savedData['audio']) ? 'Audio' : 'Media'))));
-                $reply .= "\n📌 Type: " . $type;
-            }
-            
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
@@ -452,7 +425,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     }
 
     // ==========================================
-    // AUTO DM MANAGEMENT (Admin)
+    // AUTO DM MANAGEMENT
     // ==========================================
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'manage_auto_dm') {
         unset($botData['admin_states'][$userId]);
@@ -479,21 +452,20 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // ADMIN FUNCTIONS
     // ==========================================
     
-    // Folder button creation
     if ($isAdmin && isset($botData['pending_folder_button'][$userId])) {
         unset($botData['pending_folder_button'][$userId]);
         $link = trim($text);
         if (strpos($link, 't.me/addlist/') !== false || strpos($link, 'telegram.me/addlist/') !== false) {
             $botData['folder_buttons'][] = ['link' => $link, 'created_at' => time()];
             saveBotData($dataFile, $botData);
-            $reply = "✔️ <b>Folder Button Created Successfully!</b>\n\n📁 <b>Link:</b>\n" . htmlspecialchars($link);
+            $reply = "✔️ <b>Folder Button Created Successfully!</b>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
                 'parse_mode' => 'HTML'
             ], $botToken);
         } else {
-            $reply = "📌 <b>Invalid Link!</b>\n\nPlease send a valid Telegram addlist link.";
+            $reply = "📌 <b>Invalid Link!</b>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
@@ -504,7 +476,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // Private channel forward
     if ($isAdmin && isset($botData['pending_channel_forward'][$userId])) {
         unset($botData['pending_channel_forward'][$userId]);
         if (isset($message['forward_from_chat'])) {
@@ -548,12 +519,12 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                             'folder' => $folder
                         ];
                         saveBotData($dataFile, $botData);
-                        $reply = "✔️ <b>Private Channel Added Successfully!</b>\n\n📌 <b>Channel:</b> " . htmlspecialchars($chatTitle);
+                        $reply = "✔️ <b>Private Channel Added Successfully!</b>";
                     } else {
                         $reply = "✔️ <b>Private Channel Already Exists!</b>";
                     }
                 } else {
-                    $reply = "📌 <b>Failed to Create Invite Link!</b>\n\nPlease make sure bot is admin in the channel.";
+                    $reply = "📌 <b>Failed to Create Invite Link!</b>";
                 }
             } else {
                 $reply = "📌 <b>Invalid Forward!</b>";
@@ -570,7 +541,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // Edit channel
     if ($isAdmin && isset($botData['pending_edit_channel'][$userId])) {
         $editData = $botData['pending_edit_channel'][$userId];
         unset($botData['pending_edit_channel'][$userId]);
@@ -592,7 +562,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // Reorder channels
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'reorder_channels') {
         unset($botData['admin_states'][$userId]);
         $numbers = array_map('trim', explode(',', $text));
@@ -613,7 +582,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             saveBotData($dataFile, $botData);
             $reply = "✔️ <b>Channels Reordered Successfully!</b>";
         } else {
-            $reply = "📌 <b>Invalid Order!</b>\n\nPlease send numbers from 1 to " . $totalChannels . " separated by commas.";
+            $reply = "📌 <b>Invalid Order!</b>";
         }
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
@@ -624,7 +593,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // New folder
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'new_folder') {
         unset($botData['admin_states'][$userId]);
         $folderName = trim($text);
@@ -632,14 +600,14 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             $botData['folders'][] = $folderName;
             $botData['current_folder'] = $folderName;
             saveBotData($dataFile, $botData);
-            $reply = "✔️ <b>Folder Created Successfully!</b>\n\n📁 " . htmlspecialchars($folderName);
+            $reply = "✔️ <b>Folder Created Successfully!</b>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
                 'parse_mode' => 'HTML'
             ], $botToken);
         } else {
-            $reply = "📌 <b>Folder already exists or name is empty!</b>";
+            $reply = "📌 <b>Folder already exists!</b>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
@@ -650,38 +618,9 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // Remove item
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'remove_item') {
         processUnifiedRemove($chatId, $userId, $text, $botData, $dataFile, $botToken, $premiumEmojis);
         unset($botData['admin_states'][$userId]);
-        return;
-    }
-
-    // Reset confirmation
-    if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'confirm_reset') {
-        unset($botData['admin_states'][$userId]);
-        if (strtolower(trim($text)) === 'yes') {
-            $GLOBALS['botData'] = createFreshData();
-            $GLOBALS['channels'] = [];
-            $GLOBALS['folders'] = [];
-            $GLOBALS['folderButtons'] = [];
-            $GLOBALS['verifiedUsers'] = [];
-            $reply = "✅ <b>Bot Reset Successfully!</b>\n\n🔄 All data has been reset to fresh state.";
-            sendTelegramRequest('sendMessage', [
-                'chat_id' => $chatId,
-                'text' => applyPremiumEmojis($reply, $premiumEmojis),
-                'parse_mode' => 'HTML'
-            ], $botToken);
-            sendAdminPanel($chatId, $botToken);
-        } else {
-            $reply = "❌ <b>Reset Cancelled</b>\n\nBot data remains unchanged.";
-            sendTelegramRequest('sendMessage', [
-                'chat_id' => $chatId,
-                'text' => applyPremiumEmojis($reply, $premiumEmojis),
-                'parse_mode' => 'HTML'
-            ], $botToken);
-            sendAdminPanel($chatId, $botToken);
-        }
         return;
     }
 
@@ -776,7 +715,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                     saveBotData($dataFile, $botData);
                     $reply = "✔️ AI Response updated for key: <b>" . htmlspecialchars($key) . "</b>";
                 } else {
-                    $reply = "📌 <b>Invalid Format!</b>\n\nUse: key|response\nExample: hi|Hello! How can I help?";
+                    $reply = "📌 <b>Invalid Format!</b>\n\nUse: key|response";
                 }
                 break;
             case 'toggle_referral':
@@ -792,7 +731,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                     saveBotData($dataFile, $botData);
                     $reply = "✔️ Referral Target set to: <b>" . $target . "</b>";
                 } else {
-                    $reply = "📌 <b>Invalid Number!</b>\n\nPlease send a valid number greater than 0.";
+                    $reply = "📌 <b>Invalid Number!</b>";
                 }
                 break;
             case 'broadcast':
@@ -839,7 +778,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // COMMAND HANDLERS
     // ==========================================
     
-    // /start command - REMOVED WELCOME MESSAGE AND BUTTON
     if (strpos($text, '/start') === 0) {
         $firstName = htmlspecialchars($message['from']['first_name'] ?? 'User');
         $lastName = isset($message['from']['last_name']) ? ' ' . htmlspecialchars($message['from']['last_name']) : '';
@@ -880,19 +818,14 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             }
         }
 
-        // ==========================================
-        // SEND AUTO DM MESSAGES FIRST (if any)
-        // ==========================================
+        // Send Auto DM messages first
         if (!empty($autoDmMessages)) {
             sendAutoDmMessages($chatId, $autoDmMessages, $botToken);
         }
 
-        // ==========================================
-        // THEN SHOW CHANNEL BUTTONS (without welcome message)
-        // ==========================================
+        // Then show channel buttons
         $keyboard = buildKeyboardWithCustomButtons($channels, $welcomeButtons, $folderButtons, true);
         
-        // Send only the keyboard with NO welcome text
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => " ",
@@ -919,34 +852,30 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // /refer command
     if ($text === '/refer' || $text === '/refer@' . getBotUsername($botToken)) {
         handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $botData, $dataFile);
         return;
     }
 
-    // /admin command
     if ($text === '/admin') {
         if ($isAdmin) {
             sendAdminPanel($chatId, $botToken);
         } else {
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
-                'text' => "❓ You are not an admin of this bot. 🚀",
+                'text' => "❌ You are not an admin.",
                 'parse_mode' => 'HTML'
             ], $botToken);
         }
         return;
     }
     
-    // /help command
-    if ($text === '/help' || $text === '/help@' . getBotUsername($botToken)) {
+    if ($text === '/help') {
         $helpText = "🏅 <b>Help & Support</b>\n\n" .
-                    "📌 <b>Available Commands:</b>\n" .
                     "/start - Start the bot\n" .
-                    "/refer - Get your referral link\n" .
-                    "/admin - Admin panel (admins only)\n" .
-                    "/help - Show this help message";
+                    "/refer - Get referral link\n" .
+                    "/admin - Admin panel\n" .
+                    "/help - Show this help";
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => applyPremiumEmojis($helpText, $premiumEmojis),
@@ -962,7 +891,7 @@ function getBotUsername($botToken) {
 }
 
 // ==========================================
-// 8. REFERRAL FUNCTIONS
+// 7. REFERRAL FUNCTIONS
 // ==========================================
 
 function handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $botData, $dataFile) {
@@ -984,6 +913,89 @@ function handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $bot
         'text' => applyPremiumEmojis($text, $premiumEmojis),
         'parse_mode' => 'HTML'
     ], $botToken);
+}
+
+// ==========================================
+// 8. AUTO DM MANAGEMENT - FIXED
+// ==========================================
+
+function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
+    $messages = $botData['auto_dm_messages'] ?? [];
+    $forwardingMode = $botData['forwarding_mode'] ?? false;
+    
+    $text = "💌 <b>Auto DM Messages Management</b>\n\n";
+    $text .= "📤 Forwarding Mode: <b>" . ($forwardingMode ? '✅ ON' : '❌ OFF') . "</b>\n\n";
+    
+    if (empty($messages)) {
+        $text .= "<i>No messages saved yet.</i>\n\n";
+        $text .= "📌 <b>How to save:</b>\n";
+        $text .= "1️⃣ Turn ON forwarding mode below\n";
+        $text .= "2️⃣ Forward any message to the bot\n";
+        $text .= "3️⃣ The message will be saved automatically\n\n";
+    } else {
+        $text .= "<b>📨 Saved Messages:</b> " . count($messages) . "\n\n";
+        foreach ($messages as $index => $msg) {
+            if ($msg['type'] === 'copy') {
+                $text .= ($index + 1) . ". 📋 Forwarded Message\n";
+            } else {
+                $type = isset($msg['text']) ? 'Text' : 
+                       (isset($msg['photo']) ? 'Photo' :
+                       (isset($msg['video']) ? 'Video' :
+                       (isset($msg['document']) ? 'Document/APK' :
+                       (isset($msg['audio']) ? 'Audio' :
+                       (isset($msg['sticker']) ? 'Sticker' : 'Unknown')))));
+                $text .= ($index + 1) . ". 📎 " . $type . "\n";
+            }
+        }
+        $text .= "\n📌 <b>To remove:</b> Type <code>remove|number</code>\n";
+        $text .= "Example: <code>remove|1</code>\n\n";
+    }
+    
+    $text .= "💡 <b>Tip:</b> You can also use the <a href='save.php'>Web Interface</a>";
+    
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => $forwardingMode ? '🔄 Turn OFF' : '🔄 Turn ON', 
+                 'callback_data' => 'adm_toggle_forwarding', 'style' => $forwardingMode ? 'danger' : 'success']
+            ],
+            [
+                ['text' => '🗑️ Clear All', 'callback_data' => 'adm_clear_auto_dm', 'style' => 'danger'],
+                ['text' => '🔙 Back to Panel', 'callback_data' => 'adm_back', 'style' => 'primary']
+            ]
+        ]
+    ];
+    
+    sendTelegramRequest('sendMessage', [
+        'chat_id' => $chatId,
+        'text' => applyPremiumEmojis($text, $premiumEmojis),
+        'parse_mode' => 'HTML',
+        'reply_markup' => $keyboard,
+        'disable_web_page_preview' => true
+    ], $botToken);
+}
+
+function removeAutoDmMessage($chatId, $userId, $text, &$botData, $dataFile, $botToken, $premiumEmojis) {
+    $parts = explode('|', $text);
+    if (isset($parts[1])) {
+        $index = intval($parts[1]) - 1;
+        if (isset($botData['auto_dm_messages'][$index])) {
+            unset($botData['auto_dm_messages'][$index]);
+            $botData['auto_dm_messages'] = array_values($botData['auto_dm_messages']);
+            saveBotData($dataFile, $botData);
+            $reply = "✔️ <b>Auto DM Message " . ($index + 1) . " removed successfully!</b>";
+        } else {
+            $reply = "📌 <b>Invalid message number!</b>";
+        }
+    } else {
+        $reply = "📌 <b>Invalid format!</b>\nUse: remove|1";
+    }
+    sendTelegramRequest('sendMessage', [
+        'chat_id' => $chatId,
+        'text' => applyPremiumEmojis($reply, $premiumEmojis),
+        'parse_mode' => 'HTML'
+    ], $botToken);
+    showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
 }
 
 // ==========================================
@@ -1058,7 +1070,7 @@ function processUnifiedRemove($chatId, $userId, $text, &$botData, $dataFile, $bo
     $items = $botData['pending_removal_items'] ?? [];
     
     if (!isset($items[$number])) {
-        $reply = "📌 <b>Invalid Number!</b>\n\nPlease send a valid number from the list.";
+        $reply = "📌 <b>Invalid Number!</b>";
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => applyPremiumEmojis($reply, $premiumEmojis),
@@ -1078,7 +1090,7 @@ function processUnifiedRemove($chatId, $userId, $text, &$botData, $dataFile, $bo
             unset($botData['channels'][$channelIndex]);
             $botData['channels'] = array_values($botData['channels']);
             saveBotData($dataFile, $botData);
-            $reply = "✔️ <b>Channel Removed Successfully!</b>\n\n" . "📌 <b>Channel:</b> " . htmlspecialchars($title);
+            $reply = "✔️ <b>Channel Removed Successfully!</b>\n\n📌 <b>Channel:</b> " . htmlspecialchars($title);
         } else {
             $reply = "📌 <b>Channel not found!</b>";
         }
@@ -1099,7 +1111,7 @@ function processUnifiedRemove($chatId, $userId, $text, &$botData, $dataFile, $bo
             $botData['current_folder'] = '';
         }
         saveBotData($dataFile, $botData);
-        $reply = "✔️ <b>Folder Removed Successfully!</b>\n\n" . "📁 <b>Removed Folder:</b> " . htmlspecialchars($folderName);
+        $reply = "✔️ <b>Folder Removed Successfully!</b>\n\n📁 <b>Removed Folder:</b> " . htmlspecialchars($folderName);
         sendTelegramRequest('sendMessage', [
             'chat_id' => $chatId,
             'text' => applyPremiumEmojis($reply, $premiumEmojis),
@@ -1130,85 +1142,7 @@ function getAIResponse($message, $aiResponses, $userId) {
 }
 
 // ==========================================
-// 11. AUTO DM MANAGEMENT
-// ==========================================
-
-function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
-    $messages = $botData['auto_dm_messages'] ?? [];
-    $forwardingMode = $botData['forwarding_mode'] ?? false;
-    
-    $text = "💌 <b>Auto DM Messages</b>\n\n";
-    $text .= "📤 Forwarding Mode: <b>" . ($forwardingMode ? '✅ ON' : '❌ OFF') . "</b>\n\n";
-    
-    if (empty($messages)) {
-        $text .= "<i>No messages saved yet.</i>\n\n";
-        $text .= "📌 <b>How to save:</b>\n";
-        $text .= "1. Turn ON forwarding mode\n";
-        $text .= "2. Forward any message to the bot\n";
-        $text .= "3. The message will be saved\n";
-    } else {
-        $text .= "<b>Saved Messages:</b> " . count($messages) . "\n\n";
-        foreach ($messages as $index => $msg) {
-            if ($msg['type'] === 'copy') {
-                $text .= ($index + 1) . ". 📋 Forwarded Message\n";
-            } else {
-                $type = isset($msg['text']) ? 'Text' : 
-                       (isset($msg['photo']) ? 'Photo' :
-                       (isset($msg['video']) ? 'Video' :
-                       (isset($msg['document']) ? 'Document/APK' :
-                       (isset($msg['audio']) ? 'Audio' : 'Unknown'))));
-                $text .= ($index + 1) . ". 📎 " . $type . "\n";
-            }
-        }
-        $text .= "\n📌 To remove: Type <code>remove|number</code>\n";
-    }
-    
-    $keyboard = [
-        'inline_keyboard' => [
-            [
-                ['text' => $forwardingMode ? '🔄 Turn OFF' : '🔄 Turn ON', 
-                 'callback_data' => 'adm_toggle_forwarding', 'style' => $forwardingMode ? 'danger' : 'success']
-            ],
-            [
-                ['text' => '🗑️ Clear All', 'callback_data' => 'adm_clear_auto_dm', 'style' => 'danger'],
-                ['text' => '🔙 Back to Panel', 'callback_data' => 'adm_back', 'style' => 'primary']
-            ]
-        ]
-    ];
-    
-    sendTelegramRequest('sendMessage', [
-        'chat_id' => $chatId,
-        'text' => applyPremiumEmojis($text, $premiumEmojis),
-        'parse_mode' => 'HTML',
-        'reply_markup' => $keyboard
-    ], $botToken);
-}
-
-function removeAutoDmMessage($chatId, $userId, $text, &$botData, $dataFile, $botToken, $premiumEmojis) {
-    $parts = explode('|', $text);
-    if (isset($parts[1])) {
-        $index = intval($parts[1]) - 1;
-        if (isset($botData['auto_dm_messages'][$index])) {
-            unset($botData['auto_dm_messages'][$index]);
-            $botData['auto_dm_messages'] = array_values($botData['auto_dm_messages']);
-            saveBotData($dataFile, $botData);
-            $reply = "✔️ <b>Auto DM Message removed successfully!</b>";
-        } else {
-            $reply = "📌 <b>Invalid message number!</b>";
-        }
-    } else {
-        $reply = "📌 <b>Invalid format!</b>\nUse: remove|1";
-    }
-    sendTelegramRequest('sendMessage', [
-        'chat_id' => $chatId,
-        'text' => applyPremiumEmojis($reply, $premiumEmojis),
-        'parse_mode' => 'HTML'
-    ], $botToken);
-    showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
-}
-
-// ==========================================
-// 12. SHOW CURRENT FOLDER
+// 11. SHOW CURRENT FOLDER
 // ==========================================
 
 function showCurrentFolder($chatId, $botToken, $botData) {
@@ -1265,7 +1199,7 @@ function showCurrentFolder($chatId, $botToken, $botData) {
 }
 
 // ==========================================
-// 13. CALLBACK HANDLER
+// 12. CALLBACK HANDLER
 // ==========================================
 
 function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLink, $premiumEmojis, $admins, &$botData, $dataFile, $folders, $folderButtons, $verificationSuccessMsg, $referralEnabled, $referralTarget, $userWelcomeMsg, &$verifiedUsers) {
@@ -1277,6 +1211,9 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
 
     $isAdmin = in_array((string)$userId, $admins);
 
+    // ==========================================
+    // TOGGLE FORWARDING MODE
+    // ==========================================
     if ($data === 'adm_toggle_forwarding') {
         if (!$isAdmin) {
             sendTelegramRequest('answerCallbackQuery', [
@@ -1296,6 +1233,9 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         return;
     }
 
+    // ==========================================
+    // CLEAR ALL AUTO DM
+    // ==========================================
     if ($data === 'adm_clear_auto_dm') {
         if (!$isAdmin) {
             sendTelegramRequest('answerCallbackQuery', [
@@ -1314,6 +1254,9 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         return;
     }
 
+    // ==========================================
+    // ADMIN PANEL NAVIGATION
+    // ==========================================
     if (strpos($data, 'adm_') === 0) {
         if (!$isAdmin) {
             sendTelegramRequest('answerCallbackQuery', [
@@ -1351,18 +1294,18 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             if ($totalChannels < 2) {
                 sendTelegramRequest('answerCallbackQuery', [
                     'callback_query_id' => $callbackQueryId,
-                    'text' => 'Need at least 2 channels to reorder!'
+                    'text' => 'Need at least 2 channels!'
                 ], $botToken);
                 return;
             }
-            $text = "🔢 <b>Reorder Channels</b>\n\n📋 <b>Current Channel Order:</b>\n";
+            $text = "🔢 <b>Reorder Channels</b>\n\n📋 <b>Current Order:</b>\n";
             foreach ($botData['channels'] as $index => $chan) {
                 $type = $chan['type'] ?? 'public';
                 $typeLabel = $type === 'private' ? '🔒' : '🌐';
                 $title = $chan['title'] ?? $chan['id'];
                 $text .= ($index + 1) . ". $typeLabel " . htmlspecialchars($title) . "\n";
             }
-            $text .= "\n📩 <b>Send new order:</b>\nSend numbers from 1 to " . $totalChannels . " separated by commas.\nExample: <code>3,1,2</code>";
+            $text .= "\n📩 Send numbers from 1 to " . $totalChannels . " separated by commas.\nExample: <code>3,1,2</code>";
             $botData['admin_states'][$userId] = 'reorder_channels';
             saveBotData($dataFile, $botData);
             sendTelegramRequest('sendMessage', [
@@ -1384,6 +1327,9 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             return;
         }
         
+        // ==========================================
+        // AUTO DM MANAGEMENT BUTTON - FIXED
+        // ==========================================
         if ($data === 'adm_manage_auto_dm') {
             $botData['admin_states'][$userId] = 'manage_auto_dm';
             saveBotData($dataFile, $botData);
@@ -1438,7 +1384,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             saveBotData($dataFile, $botData);
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
-                'text' => "🎯 <b>Set Referral Target</b>\n\nSend the number of referrals required for rewards:\n\nCurrent Target: <b>" . $botData['referral_target'] . "</b>",
+                'text' => "🎯 <b>Set Referral Target</b>\n\nSend the number of referrals required:\n\nCurrent Target: <b>" . $botData['referral_target'] . "</b>",
                 'parse_mode' => 'HTML'
             ], $botToken);
             return;
@@ -1449,11 +1395,11 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 $keyboard = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '🌐 Public Channel', 'callback_data' => 'adm_add_public', 'style' => 'primary'],
-                            ['text' => '🔒 Private Channel', 'callback_data' => 'adm_add_private', 'style' => 'primary']
+                            ['text' => '🌐 Public', 'callback_data' => 'adm_add_public', 'style' => 'primary'],
+                            ['text' => '🔒 Private', 'callback_data' => 'adm_add_private', 'style' => 'primary']
                         ],
                         [
-                            ['text' => '📁 Create Folder Button', 'callback_data' => 'adm_add_folder_btn', 'style' => 'success']
+                            ['text' => '📁 Folder Button', 'callback_data' => 'adm_add_folder_btn', 'style' => 'success']
                         ],
                         [
                             ['text' => '📁 Current Folder: ' . ($botData['current_folder'] ?: 'None'), 'callback_data' => 'show_current_folder', 'style' => 'primary'],
@@ -1463,7 +1409,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 ];
                 sendTelegramRequest('sendMessage', [
                     'chat_id' => $chatId,
-                    'text' => "🔖 <b>Select Option:</b>\n\nChoose an option:",
+                    'text' => "🔖 <b>Select Option:</b>",
                     'parse_mode' => 'HTML',
                     'reply_markup' => $keyboard
                 ], $botToken);
@@ -1478,7 +1424,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 saveBotData($dataFile, $botData);
                 sendTelegramRequest('sendMessage', [
                     'chat_id' => $chatId,
-                    'text' => "📁 <b>Create Folder Button</b>\n\nSend the Telegram addlist link:\n\nExample: <code>https://t.me/addlist/2YlzShQegy9kZDU1</code>",
+                    'text' => "📁 <b>Create Folder Button</b>\n\nSend the Telegram addlist link:\nExample: <code>https://t.me/addlist/2YlzShQegy9kZDU1</code>",
                     'parse_mode' => 'HTML'
                 ], $botToken);
                 return;
@@ -1514,19 +1460,19 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             case 'adm_edit_verification_msg':
                 $botData['admin_states'][$userId] = 'edit_verification_msg';
                 saveBotData($dataFile, $botData);
-                $promptText = "✅ <b>Edit Verification Success Message</b>\n\nSend the new message:\n\nPlaceholders: {first_name}, {last_name}, {username}, {user_id}";
+                $promptText = "✅ <b>Edit Verification Success Message</b>\n\nSend the new message:";
                 break;
                 
             case 'adm_edit_user_welcome':
                 $botData['admin_states'][$userId] = 'edit_user_welcome';
                 saveBotData($dataFile, $botData);
-                $promptText = "🎉 <b>Edit User Welcome Message</b>\n\nSend the new welcome message for users:\n\nPlaceholders: {first_name}, {last_name}, {username}, {user_id}";
+                $promptText = "🎉 <b>Edit User Welcome Message</b>\n\nSend the new welcome message:";
                 break;
                 
             case 'adm_edit_user_join':
                 $botData['admin_states'][$userId] = 'edit_user_join';
                 saveBotData($dataFile, $botData);
-                $promptText = "🎯 <b>Edit User Join Notification</b>\n\nSend the new notification for admins when a user joins:\n\nPlaceholders: {first_name}, {last_name}, {username}, {user_id}, {date}";
+                $promptText = "🎯 <b>Edit User Join Notification</b>\n\nSend the new notification:";
                 break;
                 
             case 'adm_add_admin':
@@ -1544,26 +1490,26 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             case 'adm_edit_welcome':
                 $botData['admin_states'][$userId] = 'edit_welcome';
                 saveBotData($dataFile, $botData);
-                $promptText = "🔖 <b>Edit Welcome Message</b>\n\nSend the new welcome message.\n\nPlaceholders: {first_name}, {last_name}, {username}, {user_id}";
+                $promptText = "🔖 <b>Edit Welcome Message</b>\n\nSend the new welcome message:";
                 break;
                 
             case 'adm_edit_ai_response':
                 $botData['admin_states'][$userId] = 'edit_ai_response';
                 saveBotData($dataFile, $botData);
-                $promptText = "🤖 <b>Edit AI Response</b>\n\nFormat: <code>key|response</code>\n\nExample: <code>hi|Hello! How can I help?</code>\n\nCurrent keys: " . implode(', ', array_keys($botData['ai_responses'] ?? []));
+                $promptText = "🤖 <b>Edit AI Response</b>\n\nFormat: <code>key|response</code>\nExample: <code>hi|Hello!</code>";
                 break;
                 
             case 'adm_broadcast':
                 $botData['admin_states'][$userId] = 'broadcast';
                 saveBotData($dataFile, $botData);
                 $totalUsers = count($botData['registered'] ?? []);
-                $promptText = "📌 <b>Broadcast Message</b>\n\nSend the message to broadcast to <b>" . $totalUsers . "</b> users:";
+                $promptText = "📌 <b>Broadcast Message</b>\n\nSend message to <b>" . $totalUsers . "</b> users:";
                 break;
                 
             case 'adm_add_custom_btn':
                 $botData['admin_states'][$userId] = 'add_custom_btn';
                 saveBotData($dataFile, $botData);
-                $promptText = "🔖 <b>Add Custom Welcome Button</b>\n\nFormat: url|Button Text|https://example.com|primary";
+                $promptText = "🔖 <b>Add Custom Button</b>\n\nFormat: url|Button Text|https://example.com|primary";
                 break;
                 
             case 'adm_clear_buttons':
@@ -1574,6 +1520,17 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                     'text' => "✔️ All custom welcome buttons removed."
                 ], $botToken);
                 showCurrentFolder($chatId, $botToken, $botData);
+                return;
+                
+            case 'adm_reset_bot':
+                $confirmText = "⚠️ <b>⚠️ DANGER: Reset Bot ⚠️</b>\n\nThis will <b>PERMANENTLY DELETE</b> all data:\n❌ All channels\n❌ All folders\n❌ All users\n❌ All referrals\n❌ All verification data\n\n📌 <b>Type 'yes' to confirm reset</b>";
+                $botData['admin_states'][$userId] = 'confirm_reset';
+                saveBotData($dataFile, $botData);
+                sendTelegramRequest('sendMessage', [
+                    'chat_id' => $chatId,
+                    'text' => applyPremiumEmojis($confirmText, $premiumEmojis),
+                    'parse_mode' => 'HTML'
+                ], $botToken);
                 return;
         }
 
@@ -1640,14 +1597,9 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             }
             
             $firstName = $callbackQuery['from']['first_name'] ?? 'User';
-            $lastName = isset($callbackQuery['from']['last_name']) ? ' ' . $callbackQuery['from']['last_name'] : '';
-            $username = isset($callbackQuery['from']['username']) ? '@' . $callbackQuery['from']['username'] : 'None';
             
             $userMsg = $userWelcomeMsg;
             $userMsg = str_replace('{first_name}', $firstName, $userMsg);
-            $userMsg = str_replace('{last_name}', $lastName, $userMsg);
-            $userMsg = str_replace('{username}', $username, $userMsg);
-            $userMsg = str_replace('{user_id}', $userId, $userMsg);
             
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
@@ -1657,13 +1609,10 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
 
             $successText = $GLOBALS['verificationSuccessMsg'];
             $successText = str_replace('{first_name}', $firstName, $successText);
-            $successText = str_replace('{last_name}', $lastName, $successText);
-            $successText = str_replace('{username}', $username, $successText);
-            $successText = str_replace('{user_id}', $userId, $successText);
 
             if ($referralEnabled) {
                 $refCount = $botData['referrals'][$userId]['count'] ?? 0;
-                $successText .= "\n\n💡 <b>Referral System:</b> You have referred <b>" . $refCount . "</b> users. Use /refer to get your link!";
+                $successText .= "\n\n💡 <b>Referral System:</b> You have referred <b>" . $refCount . "</b> users.";
             }
 
             sendTelegramRequest('sendMessage', [
@@ -1676,13 +1625,8 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             if (!$postSent && !empty($solvedPostLink)) {
                 sendTelegramRequest('sendMessage', [
                     'chat_id' => $chatId,
-                    'text' => applyPremiumEmojis("🔖 Click below to view:", $premiumEmojis),
-                    'parse_mode' => 'HTML',
-                    'reply_markup' => [
-                        'inline_keyboard' => [[
-                            ['text' => 'Open Post', 'url' => $solvedPostLink, 'style' => 'success']
-                        ]]
-                    ]
+                    'text' => "🔖 <a href='$solvedPostLink'>Click here</a>",
+                    'parse_mode' => 'HTML'
                 ], $botToken);
             }
         } else {
@@ -1704,7 +1648,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
 }
 
 // ==========================================
-// 14. UTILITY FUNCTIONS
+// 13. UTILITY FUNCTIONS
 // ==========================================
 
 function sendTelegramRequest($method, $data = [], $token = '') {
@@ -1726,6 +1670,7 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
     $user = $chatJoinRequest['from'];
     $userId = $user['id'];
     $chatId = $chatJoinRequest['chat']['id'] ?? null;
+    $chatTitle = $chatJoinRequest['chat']['title'] ?? 'Channel';
     
     $isRegistered = isset($botData['registered'][$userId]) && $botData['registered'][$userId] === true;
     $requestKey = $chatId . '_' . $userId;
@@ -1737,12 +1682,12 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
     saveBotData($dataFile, $botData);
     
     if (!$isRegistered) {
-        // SEND ALL AUTO DM MESSAGES FIRST
+        // Send Auto DM messages
         if (!empty($autoDmMessages)) {
             sendAutoDmMessages($userId, $autoDmMessages, $botToken);
         }
 
-        // Show channel buttons (no welcome text)
+        // Show channel buttons
         $keyboard = buildKeyboardWithCustomButtons($botData['channels'] ?? [], $botData['welcome_buttons'] ?? [], $botData['folder_buttons'] ?? [], true);
         sendTelegramRequest('sendMessage', [
             'chat_id' => $userId,
@@ -1754,8 +1699,7 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
         foreach ($admins as $adm) {
             $adminText = "📌 <b>New User Join Request!</b>\n\n" .
                          "📌 <b>Channel:</b> " . $chatTitle . "\n" .
-                         "👤 <b>User:</b> " . $firstName . $lastName . "\n" .
-                         "🆔 <b>User ID:</b> <code>" . $userId . "</code>\n\n" .
+                         "👤 <b>User ID:</b> <code>" . $userId . "</code>\n\n" .
                          "☯️ <i>" . count($autoDmMessages) . " Auto DM messages sent.</i>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $adm,
@@ -1842,7 +1786,7 @@ function buildKeyboardWithCustomButtons($channels, $customButtons, $folderButton
         $folderRow = [];
         foreach ($folderButtons as $index => $btn) {
             $folderRow[] = [
-                'text' => '📁 Join All Channels ' . ($index + 1),
+                'text' => '📁 Join All ' . ($index + 1),
                 'url' => $btn['link'],
                 'style' => 'success'
             ];
@@ -1915,7 +1859,7 @@ function processCustomButtonInput($text, &$botData, $dataFile) {
 }
 
 // ==========================================
-// 15. ADMIN PANEL - FULL
+// 14. ADMIN PANEL
 // ==========================================
 
 function sendAdminPanel($chatId, $botToken) {
@@ -1928,7 +1872,7 @@ function sendAdminPanel($chatId, $botToken) {
             ],
             [
                 ['text' => '➕ Add Channel', 'callback_data' => 'adm_add_chan', 'style' => 'success'],
-                ['text' => '❌ Remove Channel', 'callback_data' => 'adm_rem_chan', 'style' => 'danger']
+                ['text' => '❌ Remove', 'callback_data' => 'adm_rem_chan', 'style' => 'danger']
             ],
             [
                 ['text' => '🔢 Reorder', 'callback_data' => 'adm_reorder', 'style' => 'primary'],
@@ -1936,14 +1880,14 @@ function sendAdminPanel($chatId, $botToken) {
             ],
             [
                 ['text' => '🔑 Edit Solved', 'callback_data' => 'adm_edit_solved', 'style' => 'primary'],
-                ['text' => '✅ Edit Verification Msg', 'callback_data' => 'adm_edit_verification_msg', 'style' => 'primary']
+                ['text' => '✅ Edit Verification', 'callback_data' => 'adm_edit_verification_msg', 'style' => 'primary']
             ],
             [
                 ['text' => '🎉 Edit User Welcome', 'callback_data' => 'adm_edit_user_welcome', 'style' => 'primary'],
                 ['text' => '🎯 Edit User Join', 'callback_data' => 'adm_edit_user_join', 'style' => 'primary']
             ],
             [
-                ['text' => '💌 Manage Auto DM Messages', 'callback_data' => 'adm_manage_auto_dm', 'style' => 'primary']
+                ['text' => '💌 Manage Auto DM', 'callback_data' => 'adm_manage_auto_dm', 'style' => 'primary']
             ],
             [
                 ['text' => '👤 Add Admin', 'callback_data' => 'adm_add_admin', 'style' => 'primary'],
@@ -1951,14 +1895,14 @@ function sendAdminPanel($chatId, $botToken) {
             ],
             [
                 ['text' => '✏️ Edit Welcome', 'callback_data' => 'adm_edit_welcome', 'style' => 'primary'],
-                ['text' => '🤖 Edit AI Responses', 'callback_data' => 'adm_edit_ai_response', 'style' => 'primary']
+                ['text' => '🤖 Edit AI', 'callback_data' => 'adm_edit_ai_response', 'style' => 'primary']
             ],
             [
                 ['text' => '📢 Broadcast', 'callback_data' => 'adm_broadcast', 'style' => 'primary'],
                 ['text' => '🎯 Toggle Referral', 'callback_data' => 'adm_toggle_referral', 'style' => 'primary']
             ],
             [
-                ['text' => '🎯 Set Referral Target', 'callback_data' => 'adm_set_referral_target', 'style' => 'primary'],
+                ['text' => '🎯 Set Target', 'callback_data' => 'adm_set_referral_target', 'style' => 'primary'],
                 ['text' => '➕ Add Button', 'callback_data' => 'adm_add_custom_btn', 'style' => 'primary']
             ],
             [
@@ -1966,7 +1910,7 @@ function sendAdminPanel($chatId, $botToken) {
                 ['text' => '🔄 RESET BOT', 'callback_data' => 'adm_reset_bot', 'style' => 'danger']
             ],
             [
-                ['text' => '🚪 Close Panel', 'callback_data' => 'adm_close', 'style' => 'danger']
+                ['text' => '🚪 Close', 'callback_data' => 'adm_close', 'style' => 'danger']
             ]
         ]
     ];
@@ -1979,85 +1923,31 @@ function sendAdminPanel($chatId, $botToken) {
 }
 
 // ==========================================
-// 16. FULL INFO FUNCTION
+// 15. FULL INFO
 // ==========================================
 
 function showFullInfo($chatId, $botToken, $botData) {
     $registeredCount = count($botData['registered'] ?? []);
     $verifiedCount = count($botData['verified_users'] ?? []);
-    $customButtonsCount = count($botData['welcome_buttons'] ?? []);
     $folders = $botData['folders'] ?? [];
-    $folderButtons = $botData['folder_buttons'] ?? [];
-    $aiResponses = $botData['ai_responses'] ?? [];
-    $referralEnabled = $botData['referral_enabled'] ?? true;
-    $referralTarget = $botData['referral_target'] ?? 3;
     $autoDmMessages = $botData['auto_dm_messages'] ?? [];
     $forwardingMode = $botData['forwarding_mode'] ?? false;
     
-    $totalReferrals = 0;
-    foreach ($botData['referrals'] ?? [] as $ref) {
-        $totalReferrals += $ref['count'] ?? 0;
-    }
-    
     $text = "📊 <b>⚡ Network Statistics ⚡</b> 📊\n\n" .
-            "👥 Total Registered: <b>" . $registeredCount . "</b>\n" .
-            "✅ Verified Users: <b>" . $verifiedCount . "</b>\n" .
+            "👥 Registered: <b>" . $registeredCount . "</b>\n" .
+            "✅ Verified: <b>" . $verifiedCount . "</b>\n" .
             "📢 Channels: <b>" . count($botData['channels'] ?? []) . "</b>\n" .
             "📁 Folders: <b>" . count($folders) . "</b>\n" .
-            "📌 Folder Buttons: <b>" . count($folderButtons) . "</b>\n" .
             "👤 Admins: <b>" . count($botData['admins']) . "</b>\n" .
-            "🎯 Custom Buttons: <b>" . $customButtonsCount . "</b>\n" .
-            "🤖 AI Responses: <b>" . count($aiResponses) . "</b>\n" .
-            "🎯 Referral System: <b>" . ($referralEnabled ? '✅ ENABLED' : '❌ DISABLED') . "</b>\n" .
-            "🎯 Referral Target: <b>" . $referralTarget . "</b> users\n" .
-            "👥 Total Referrals: <b>" . $totalReferrals . "</b>\n" .
-            "💌 Auto DM Messages: <b>" . count($autoDmMessages) . "</b>\n" .
-            "📤 Forwarding Mode: <b>" . ($forwardingMode ? '✅ ON' : '❌ OFF') . "</b>\n\n" .
-            "🖼️ <b>Image URL:</b>\n" . htmlspecialchars($botData['imageUrl']) . "\n\n" .
-            "🔑 <b>Solved Link:</b>\n" . htmlspecialchars($botData['solved_post_link']) . "\n\n" .
-            "👤 <b>Admins List:</b>\n";
+            "💌 Auto DM: <b>" . count($autoDmMessages) . "</b>\n" .
+            "📤 Forwarding: <b>" . ($forwardingMode ? '✅ ON' : '❌ OFF') . "</b>\n\n" .
+            "🖼️ <b>Image:</b> " . htmlspecialchars($botData['imageUrl']) . "\n" .
+            "🔑 <b>Solved:</b> " . htmlspecialchars($botData['solved_post_link']) . "\n";
     
-    foreach ($botData['admins'] as $index => $adm) {
-        $text .= "• <code>" . $adm . "</code>\n";
-    }
-
-    $text .= "\n📁 <b>Folders:</b>\n";
-    if (empty($folders)) {
-        $text .= "<i>No folders created yet</i>\n";
-    } else {
-        foreach ($folders as $folder) {
-            $count = 0;
-            foreach ($botData['channels'] as $chan) {
-                if (($chan['folder'] ?? '') == $folder) { $count++; }
-            }
-            $isActive = ($folder == ($botData['current_folder'] ?? '')) ? ' ✅ (Active)' : '';
-            $text .= "📁 " . htmlspecialchars($folder) . " (<b>" . $count . "</b> channels)" . $isActive . "\n";
-        }
-    }
-
-    $text .= "\n🤖 <b>AI Responses:</b>\n";
-    foreach ($aiResponses as $key => $response) {
-        $text .= "• <b>" . htmlspecialchars($key) . "</b>: " . htmlspecialchars(substr($response, 0, 50)) . (strlen($response) > 50 ? '...' : '') . "\n";
-    }
-
-    $text .= "\n📌 <b>Active Channels:</b>\n";
-    $registeredChans = $botData['channels'] ?? [];
-    if (empty($registeredChans)) {
-        $text .= "<i>❌ No channels added yet</i>\n";
-    } else {
-        foreach ($registeredChans as $index => $chan) {
-            $type = $chan['type'] ?? 'public';
-            $typeLabel = $type === 'private' ? '🔒 Private' : '🌐 Public';
-            $title = isset($chan['title']) ? htmlspecialchars($chan['title']) : htmlspecialchars($chan['id']);
-            $folder = $chan['folder'] ?? 'No Folder';
-            $text .= ($index + 1) . ". $typeLabel [📁$folder]: <b>" . $title . "</b>\n   🔗 " . htmlspecialchars($chan['link']) . "\n";
-        }
-    }
-
     $keyboard = [
         'inline_keyboard' => [
             [
-                ['text' => '🔙 Back to Panel', 'callback_data' => 'adm_back', 'style' => 'primary']
+                ['text' => '🔙 Back', 'callback_data' => 'adm_back', 'style' => 'primary']
             ]
         ]
     ];
@@ -2070,13 +1960,19 @@ function showFullInfo($chatId, $botToken, $botData) {
     ], $botToken);
 }
 
+function applyPremiumEmojis($text, $premiumEmojis) {
+    if (empty($text)) return $text;
+    foreach ($premiumEmojis as $emoji => $premium) {
+        $text = str_replace($emoji, $premium, $text);
+    }
+    return $text;
+}
+
 // ==========================================
-// 17. INITIALIZATION CHECK
+// 16. INITIALIZATION
 // ==========================================
 
 error_log("Bot @lose_recover_bot initialized");
-error_log("Admins: " . count($admins));
-error_log("Channels: " . count($channels));
 error_log("Auto DM Messages: " . count($autoDmMessages));
 error_log("Forwarding Mode: " . ($forwardingMode ? 'ON' : 'OFF'));
 
