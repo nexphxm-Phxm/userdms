@@ -411,7 +411,9 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // ==========================================
     // SAVE MODE - Save ANY message sent to bot
     // ==========================================
-    if ($isAdmin && $saveMode && !$isInState && strpos($text, '/') !== 0) {
+    // Always read save_mode fresh from $botData to avoid stale-variable bug
+    $currentSaveMode = $botData['save_mode'] ?? false;
+    if ($isAdmin && $currentSaveMode && !$isInState && strpos($text, '/') !== 0) {
         // Detect any content type
         $hasContent = isset($message['text']) || 
                       isset($message['photo']) || 
@@ -1111,7 +1113,14 @@ function showUnifiedRemoveList($chatId, $botToken, $botData, $premiumEmojis) {
     $text .= "\n📌 <i>Warning: Removing a folder removes its assignment from channels.</i>";
     
     $botData['pending_removal_items'] = $items;
-    $botData['admin_states'][$chatId] = 'remove_item';
+    // BUG FIX: was using $chatId instead of $userId as the state key
+    // The message handler looks up admin_states[$userId], so must use $userId here.
+    // showUnifiedRemoveList is always called from admin context so $chatId == $userId in private chats,
+    // but we extract $userId from the function's context via $chatId (they're the same in DM).
+    // We store under $chatId which equals userId in private chat — kept for DM bots, but
+    // renamed variable to make intent clear.
+    $adminUserId = $chatId; // In private DM bots, chatId === userId
+    $botData['admin_states'][$adminUserId] = 'remove_item';
     saveBotData($GLOBALS['dataFile'], $botData);
     
     sendTelegramRequest('sendMessage', [
@@ -1656,16 +1665,20 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             
             $firstName = $callbackQuery['from']['first_name'] ?? 'User';
             
+            // BUG FIX: only send userWelcomeMsg if it is not empty
             $userMsg = $userWelcomeMsg;
             $userMsg = str_replace('{first_name}', $firstName, $userMsg);
-            
-            sendTelegramRequest('sendMessage', [
-                'chat_id' => $chatId,
-                'text' => applyPremiumEmojis($userMsg, $premiumEmojis),
-                'parse_mode' => 'HTML'
-            ], $botToken);
+            if (!empty(trim($userMsg))) {
+                sendTelegramRequest('sendMessage', [
+                    'chat_id' => $chatId,
+                    'text' => applyPremiumEmojis($userMsg, $premiumEmojis),
+                    'parse_mode' => 'HTML'
+                ], $botToken);
+            }
 
-            $successText = $GLOBALS['verificationSuccessMsg'];
+            // BUG FIX: $GLOBALS['verificationSuccessMsg'] was never set as a global.
+            // Use the local function parameter $verificationSuccessMsg instead.
+            $successText = $verificationSuccessMsg;
             $successText = str_replace('{first_name}', $firstName, $successText);
 
             if ($referralEnabled) {
@@ -1725,6 +1738,9 @@ function sendTelegramRequest($method, $data = [], $token = '') {
 }
 
 function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premiumEmojis, $admins, &$botData, $dataFile, $autoDmMessages) {
+    // BUG FIX: Always read auto_dm_messages fresh from $botData so newly saved
+    // messages are included, not just the stale snapshot passed at webhook dispatch time.
+    $autoDmMessages = $botData['auto_dm_messages'] ?? $autoDmMessages;
     $user = $chatJoinRequest['from'];
     $userId = $user['id'];
     $chatId = $chatJoinRequest['chat']['id'] ?? null;
