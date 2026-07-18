@@ -403,6 +403,25 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     if (!$chatId || !$userId) return;
 
     $isAdmin = in_array((string)$userId, $admins);
+
+    // ==========================================
+    // BUG FIX: Check manage_auto_dm state FIRST (before save mode block).
+    // Previously this was checked AFTER save mode, which meant a 'remove|1'
+    // command sent while save mode was ON would be saved as an Auto DM message
+    // instead of being processed as a remove command.
+    // ==========================================
+    if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'manage_auto_dm') {
+        unset($botData['admin_states'][$userId]);
+        if (strpos($text, 'remove|') === 0) {
+            removeAutoDmMessage($chatId, $userId, $text, $botData, $dataFile, $botToken, $premiumEmojis);
+        } else {
+            showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
+        }
+        return;
+    }
+
+    // $isInState excludes manage_auto_dm because that is now handled above.
+    // It only covers states that should block save mode.
     $isInState = isset($botData['admin_states'][$userId]) || 
                  isset($botData['pending_channel_forward'][$userId]) || 
                  isset($botData['pending_folder_button'][$userId]) ||
@@ -413,7 +432,12 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // ==========================================
     // Always read save_mode fresh from $botData to avoid stale-variable bug
     $currentSaveMode = $botData['save_mode'] ?? false;
-    if ($isAdmin && $currentSaveMode && !$isInState && strpos($text, '/') !== 0) {
+    // BUG FIX: For photo/video/document/sticker/animation messages, $text is ''
+    // (empty string). We must allow empty $text through (it is not a command).
+    // Previously: strpos('', '/') returns false, and false !== 0 is true in PHP,
+    // so it accidentally worked — but the correct, explicit check is below.
+    $isNotCommand = empty($text) || strpos($text, '/') !== 0;
+    if ($isAdmin && $currentSaveMode && !$isInState && $isNotCommand) {
         // Detect any content type
         $hasContent = isset($message['text']) || 
                       isset($message['photo']) || 
@@ -453,18 +477,8 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         }
     }
 
-    // ==========================================
-    // AUTO DM MANAGEMENT
-    // ==========================================
-    if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'manage_auto_dm') {
-        unset($botData['admin_states'][$userId]);
-        if (strpos($text, 'remove|') === 0) {
-            removeAutoDmMessage($chatId, $userId, $text, $botData, $dataFile, $botToken, $premiumEmojis);
-        } else {
-            showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
-        }
-        return;
-    }
+    // AUTO DM MANAGEMENT state is now handled above (before save mode).
+    // This block is intentionally removed to prevent duplicate handling.
 
     // AI Response (only if not in save mode)
     if (!$isAdmin && !$isInState && strpos($text, '/') !== 0 && !empty($text)) {
@@ -868,9 +882,13 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             }
         }
 
-        // Send Auto DM messages first
-        if (!empty($autoDmMessages)) {
-            sendAutoDmMessages($chatId, $autoDmMessages, $botToken);
+        // BUG FIX: Always read auto_dm_messages fresh from $botData.
+        // The $autoDmMessages parameter is a snapshot from webhook dispatch time
+        // and will NOT include messages saved in the same session.
+        // Reading directly from $botData guarantees the latest saved messages are sent.
+        $freshAutoDm = $botData['auto_dm_messages'] ?? [];
+        if (!empty($freshAutoDm)) {
+            sendAutoDmMessages($chatId, $freshAutoDm, $botToken);
         }
 
         // Then show channel buttons
