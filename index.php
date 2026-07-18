@@ -100,7 +100,7 @@ $userJoinMsg = $botData['user_join_msg'] ?? '';
 $verifiedUsers = $botData['verified_users'] ?? [];
 $forwardingMode = $botData['forwarding_mode'] ?? false;
 
-// Premium Emoji Configuration - ALL EMOJIS FROM YOUR PYTHON CODE
+// Premium Emoji Configuration - ALL EMOJIS
 $premiumEmojis = [
     '🔖' => '<tg-emoji emoji-id="6154668949549092628">🔖</tg-emoji>',
     '📌' => '<tg-emoji emoji-id="6154635564768300782">📌</tg-emoji>',
@@ -125,7 +125,6 @@ $premiumEmojis = [
     '✨' => '<tg-emoji emoji-id="5990073381720953601">✨</tg-emoji>',
     '💎' => '<tg-emoji emoji-id="5796262720495946957">💎</tg-emoji>',
     '✈️' => '<tg-emoji emoji-id="5325705326157113713">✈️</tg-emoji>',
-    // Extra emojis from your Python code
     '🚦' => '<tg-emoji emoji-id="5262179768980443936">🚦</tg-emoji>',
     '🚀' => '<tg-emoji emoji-id="5222075933468954340">🚀</tg-emoji>',
 ];
@@ -148,13 +147,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         foreach ($autoDmMessages as $index => $msg) {
             echo "<p>" . ($index + 1) . ". ";
             if ($msg['type'] === 'copy') {
-                echo "📋 Forwarded Message";
+                echo "📋 Forwarded Message (from chat: " . ($msg['from_chat_id'] ?? 'unknown') . ")";
             } else {
                 $type = isset($msg['text']) ? 'Text' : 
                        (isset($msg['photo']) ? 'Photo' :
                        (isset($msg['video']) ? 'Video' :
                        (isset($msg['document']) ? 'Document/APK' :
-                       (isset($msg['audio']) ? 'Audio' : 'Unknown'))));
+                       (isset($msg['audio']) ? 'Audio' :
+                       (isset($msg['sticker']) ? 'Sticker' : 'Unknown')))));
                 echo "📎 " . $type;
             }
             echo "</p>";
@@ -164,15 +164,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo "<p>📌 <b>How to save:</b></p>";
         echo "<ol>";
         echo "<li>Send <code>/admin</code> to @lose_recover_bot</li>";
-        echo "<li>Click '💌 Manage Auto DM Messages'</li>";
+        echo "<li>Click '💌 Manage Auto DM'</li>";
         echo "<li>Click '🔄 Turn ON'</li>";
-        echo "<li>Forward any message to @lose_recover_bot</li>";
+        echo "<li><b>FORWARD</b> any message to @lose_recover_bot (long press → Forward)</li>";
         echo "<li>The message will be saved!</li>";
         echo "</ol>";
     }
     
     echo "<hr>";
     echo "<p><strong>Bot:</strong> <a href='https://t.me/lose_recover_bot'>@lose_recover_bot</a></p>";
+    echo "<p><strong>Web Interface:</strong> <a href='save.php'>save.php</a></p>";
     echo "<p><strong>To set webhook:</strong></p>";
     echo "<code>https://api.telegram.org/bot" . $botToken . "/setWebhook?url=" . (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] . "</code>";
     exit;
@@ -185,6 +186,9 @@ if (!$update) {
     http_response_code(200);
     exit;
 }
+
+// Log incoming update for debugging
+error_log("Received update: " . json_encode($update));
 
 if (isset($update['message'])) {
     handleMessage($update['message'], $botToken, $imageUrl, $channels, $premiumEmojis, $admins, $botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmMessages, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralTarget, $userWelcomeMsg, $userJoinMsg, $verifiedUsers, $forwardingMode);
@@ -200,25 +204,51 @@ http_response_code(200);
 exit;
 
 // ==========================================
-// 4. SAVE FUNCTIONS
+// 4. SAVE FUNCTIONS - FIXED DETECTION
 // ==========================================
+
+function detectMessageContent($message) {
+    // Check for ANY content type
+    return isset($message['text']) || 
+           isset($message['photo']) || 
+           isset($message['video']) || 
+           isset($message['document']) || 
+           isset($message['audio']) || 
+           isset($message['voice']) || 
+           isset($message['sticker']) ||
+           isset($message['animation']) ||
+           isset($message['forward_from']) ||
+           isset($message['forward_from_chat']) ||
+           isset($message['forward_origin']) ||
+           isset($message['caption']);
+}
 
 function saveForwardedMessage($message, &$botData, $dataFile) {
     $savedData = [];
     
+    // ==========================================
+    // DETECT FORWARDED MESSAGE - ALL TYPES
+    // ==========================================
     if (isset($message['forward_from_chat']) && isset($message['forward_from_message_id'])) {
+        // Forwarded from a channel/group
         $savedData = [
             'type' => 'copy',
             'from_chat_id' => $message['forward_from_chat']['id'],
             'message_id' => $message['forward_from_message_id']
         ];
-    } elseif (isset($message['forward_from']) && isset($message['forward_from_message_id'])) {
+        error_log("Saved forwarded message from channel: " . $message['forward_from_chat']['id']);
+    } 
+    elseif (isset($message['forward_from']) && isset($message['forward_from_message_id'])) {
+        // Forwarded from a user
         $savedData = [
             'type' => 'copy',
             'from_chat_id' => $message['forward_from']['id'],
             'message_id' => $message['forward_from_message_id']
         ];
-    } elseif (isset($message['forward_origin'])) {
+        error_log("Saved forwarded message from user: " . $message['forward_from']['id']);
+    } 
+    elseif (isset($message['forward_origin'])) {
+        // New style forward
         $origin = $message['forward_origin'];
         if (isset($origin['chat']) && isset($origin['message_id'])) {
             $savedData = [
@@ -226,26 +256,36 @@ function saveForwardedMessage($message, &$botData, $dataFile) {
                 'from_chat_id' => $origin['chat']['id'],
                 'message_id' => $origin['message_id']
             ];
+            error_log("Saved forwarded message (new style) from: " . $origin['chat']['id']);
         } else {
+            // Not a forward, save content
             $savedData = saveMessageContent($message);
+            error_log("Saved direct message content");
         }
-    } else {
+    } 
+    else {
+        // Direct message - save content
         $savedData = saveMessageContent($message);
+        error_log("Saved direct message content");
     }
     
+    // Save to database
     $botData['auto_dm_messages'][] = $savedData;
     saveBotData($dataFile, $botData);
+    
     return $savedData;
 }
 
 function saveMessageContent($message) {
     $data = ['type' => 'content'];
     
+    // TEXT
     if (isset($message['text'])) {
         $data['text'] = $message['text'];
         $data['parse_mode'] = 'HTML';
     }
     
+    // PHOTO
     if (isset($message['photo'])) {
         $photo = end($message['photo']);
         $data['photo'] = $photo['file_id'];
@@ -254,30 +294,36 @@ function saveMessageContent($message) {
         }
     }
     
+    // VIDEO
     if (isset($message['video'])) {
         $data['video'] = $message['video']['file_id'];
         $data['caption'] = $message['caption'] ?? '';
     }
     
+    // DOCUMENT (APK files)
     if (isset($message['document'])) {
         $data['document'] = $message['document']['file_id'];
         $data['caption'] = $message['caption'] ?? '';
         $data['file_name'] = $message['document']['file_name'] ?? 'file';
     }
     
+    // AUDIO
     if (isset($message['audio'])) {
         $data['audio'] = $message['audio']['file_id'];
         $data['caption'] = $message['caption'] ?? '';
     }
     
+    // VOICE
     if (isset($message['voice'])) {
         $data['voice'] = $message['voice']['file_id'];
     }
     
+    // STICKER
     if (isset($message['sticker'])) {
         $data['sticker'] = $message['sticker']['file_id'];
     }
     
+    // ANIMATION (GIF)
     if (isset($message['animation'])) {
         $data['animation'] = $message['animation']['file_id'];
         $data['caption'] = $message['caption'] ?? '';
@@ -361,22 +407,28 @@ function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
         return;
     }
     
-    foreach ($autoDmMessages as $msgData) {
+    foreach ($autoDmMessages as $index => $msgData) {
         if ($msgData['type'] === 'copy') {
+            // Send forwarded message exactly as-is
             $response = sendTelegramRequest('copyMessage', [
                 'chat_id' => $chatId,
                 'from_chat_id' => $msgData['from_chat_id'],
                 'message_id' => $msgData['message_id']
             ], $botToken);
+            
+            if (!$response || !isset($response['ok']) || $response['ok'] !== true) {
+                error_log("Failed to copy message " . ($index + 1) . ": " . json_encode($response));
+            }
         } else {
+            // Send saved content
             sendSavedMessage($chatId, $msgData, $botToken);
         }
-        usleep(500000);
+        usleep(500000); // 0.5 second delay
     }
 }
 
 // ==========================================
-// 6. MESSAGE HANDLER
+// 6. MESSAGE HANDLER - FIXED
 // ==========================================
 
 function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmMessages, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers, &$forwardingMode) {
@@ -394,33 +446,44 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                  isset($botData['pending_edit_channel'][$userId]);
 
     // ==========================================
-    // FORWARDING MODE - Save any message
+    // FORWARDING MODE - DETECT AND SAVE ANY MESSAGE
     // ==========================================
     if ($isAdmin && $forwardingMode && !$isInState && strpos($text, '/') !== 0) {
-        $hasContent = isset($message['text']) || 
-                      isset($message['photo']) || 
-                      isset($message['video']) || 
-                      isset($message['document']) || 
-                      isset($message['audio']) || 
-                      isset($message['voice']) || 
-                      isset($message['sticker']) ||
-                      isset($message['animation']) ||
-                      isset($message['forward_from']) ||
-                      isset($message['forward_from_chat']) ||
-                      isset($message['forward_origin']);
+        // Check for ANY content type
+        $hasContent = detectMessageContent($message);
         
         if ($hasContent) {
+            error_log("Forwarding mode ON - Saving message from user: " . $userId);
+            
             $savedData = saveForwardedMessage($message, $botData, $dataFile);
             
             $reply = "✅ <b>Auto DM Message Saved!</b>\n\n";
             $reply .= "📌 Total messages: " . count($botData['auto_dm_messages']);
+            
+            // Show what type was saved
+            if ($savedData['type'] === 'copy') {
+                $reply .= "\n📌 Type: Forwarded Message";
+            } else {
+                $type = isset($savedData['text']) ? 'Text' : 
+                       (isset($savedData['photo']) ? 'Photo' :
+                       (isset($savedData['video']) ? 'Video' :
+                       (isset($savedData['document']) ? 'Document/APK' :
+                       (isset($savedData['audio']) ? 'Audio' :
+                       (isset($savedData['sticker']) ? 'Sticker' : 'Media')))));
+                $reply .= "\n📌 Type: " . $type;
+            }
             
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $chatId,
                 'text' => applyPremiumEmojis($reply, $premiumEmojis),
                 'parse_mode' => 'HTML'
             ], $botToken);
+            
+            // Show updated list
+            showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
             return;
+        } else {
+            error_log("Forwarding mode ON but no content detected in message");
         }
     }
 
@@ -916,7 +979,7 @@ function handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $bot
 }
 
 // ==========================================
-// 8. AUTO DM MANAGEMENT - FIXED
+// 8. AUTO DM MANAGEMENT
 // ==========================================
 
 function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
@@ -930,8 +993,9 @@ function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
         $text .= "<i>No messages saved yet.</i>\n\n";
         $text .= "📌 <b>How to save:</b>\n";
         $text .= "1️⃣ Turn ON forwarding mode below\n";
-        $text .= "2️⃣ Forward any message to the bot\n";
+        $text .= "2️⃣ <b>FORWARD</b> any message to the bot (long press → Forward)\n";
         $text .= "3️⃣ The message will be saved automatically\n\n";
+        $text .= "💡 <b>Note:</b> Type a message, don't forward it - it won't save!\n";
     } else {
         $text .= "<b>📨 Saved Messages:</b> " . count($messages) . "\n\n";
         foreach ($messages as $index => $msg) {
@@ -951,7 +1015,7 @@ function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
         $text .= "Example: <code>remove|1</code>\n\n";
     }
     
-    $text .= "💡 <b>Tip:</b> You can also use the <a href='save.php'>Web Interface</a>";
+    $text .= "💡 <b>Tip:</b> Use the <a href='save.php'>Web Interface</a>";
     
     $keyboard = [
         'inline_keyboard' => [
@@ -1328,7 +1392,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         }
         
         // ==========================================
-        // AUTO DM MANAGEMENT BUTTON - FIXED
+        // AUTO DM MANAGEMENT BUTTON
         // ==========================================
         if ($data === 'adm_manage_auto_dm') {
             $botData['admin_states'][$userId] = 'manage_auto_dm';
