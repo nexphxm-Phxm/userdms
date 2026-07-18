@@ -1,9 +1,10 @@
 <?php
 /**
- * Auto DM Message Saver
- * This page helps you save messages for Auto DM
+ * Auto DM Message Saver - Web Interface
+ * Works with your existing bot.php
  */
 
+// Configuration
 $dataFile = __DIR__ . '/data6.json';
 
 // Load current data
@@ -11,18 +12,22 @@ function loadBotData($filePath) {
     if (!file_exists($filePath)) {
         return ['auto_dm_messages' => [], 'forwarding_mode' => false];
     }
-    return json_decode(file_get_contents($filePath), true);
+    $data = json_decode(file_get_contents($filePath), true);
+    if (!$data) {
+        return ['auto_dm_messages' => [], 'forwarding_mode' => false];
+    }
+    return $data;
 }
 
 function saveBotData($filePath, $data) {
     file_put_contents($filePath, json_encode($data, JSON_PRETTY_PRINT));
 }
 
+// Handle actions
 $botData = loadBotData($dataFile);
 $autoDmMessages = $botData['auto_dm_messages'] ?? [];
 $forwardingMode = $botData['forwarding_mode'] ?? false;
 
-// Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
@@ -55,10 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Check if bot is connected
-function checkBotStatus() {
-    $botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4";
-    $url = "https://api.telegram.org/bot" . $botToken . "/getMe";
+// Bot info
+$botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4";
+function checkBotStatus($token) {
+    $url = "https://api.telegram.org/bot" . $token . "/getMe";
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -68,15 +73,14 @@ function checkBotStatus() {
     $data = json_decode($response, true);
     return ($data && isset($data['ok']) && $data['ok'] === true) ? $data['result']['username'] : false;
 }
-
-$botUsername = checkBotStatus();
+$botUsername = checkBotStatus($botToken);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto DM Saver</title>
+    <title>💌 Auto DM Saver</title>
     <style>
         * {
             margin: 0;
@@ -107,9 +111,6 @@ $botUsername = checkBotStatus();
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
         }
         .subtitle {
             color: rgba(255, 255, 255, 0.6);
@@ -125,6 +126,8 @@ $botUsername = checkBotStatus();
             padding: 15px 20px;
             margin-bottom: 25px;
             border: 1px solid rgba(255, 255, 255, 0.06);
+            flex-wrap: wrap;
+            gap: 10px;
         }
         .status-item {
             display: flex;
@@ -146,10 +149,6 @@ $botUsername = checkBotStatus();
         .status-dot.off {
             background: #ff1744;
             box-shadow: 0 0 12px rgba(255, 23, 68, 0.4);
-        }
-        .status-dot.waiting {
-            background: #ff9100;
-            box-shadow: 0 0 12px rgba(255, 145, 0, 0.4);
         }
         .badge {
             background: rgba(255, 255, 255, 0.1);
@@ -176,7 +175,6 @@ $botUsername = checkBotStatus();
         }
         .msg-item:hover {
             background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.12);
         }
         .msg-info {
             color: rgba(255, 255, 255, 0.9);
@@ -204,15 +202,6 @@ $botUsername = checkBotStatus();
             align-items: center;
             gap: 6px;
         }
-        .btn-primary {
-            background: #1a73e8;
-            color: #fff;
-        }
-        .btn-primary:hover {
-            background: #1557b0;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(26, 115, 232, 0.3);
-        }
         .btn-success {
             background: #00c853;
             color: #fff;
@@ -220,7 +209,6 @@ $botUsername = checkBotStatus();
         .btn-success:hover {
             background: #00a844;
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 200, 83, 0.3);
         }
         .btn-danger {
             background: #ff1744;
@@ -229,7 +217,6 @@ $botUsername = checkBotStatus();
         .btn-danger:hover {
             background: #d50000;
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 23, 68, 0.3);
         }
         .btn-warning {
             background: #ff9100;
@@ -238,14 +225,14 @@ $botUsername = checkBotStatus();
         .btn-warning:hover {
             background: #e67a00;
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 145, 0, 0.3);
         }
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.8);
+        .btn-primary {
+            background: #1a73e8;
+            color: #fff;
         }
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.2);
+        .btn-primary:hover {
+            background: #1557b0;
+            transform: translateY(-2px);
         }
         .btn-sm {
             padding: 4px 12px;
@@ -308,13 +295,18 @@ $botUsername = checkBotStatus();
         .bot-link:hover {
             text-decoration: underline;
         }
+        .text-muted {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            text-align: center;
+            margin-top: 20px;
+        }
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
             }
             .status-bar {
                 flex-direction: column;
-                gap: 10px;
                 align-items: flex-start;
             }
             .msg-item {
@@ -334,13 +326,10 @@ $botUsername = checkBotStatus();
 </head>
 <body>
     <div class="container">
-        <h1>
-            💌 Auto DM Saver
-            <span style="font-size: 14px; font-weight: 400; color: rgba(255,255,255,0.4);">v2.0</span>
-        </h1>
-        <p class="subtitle">Save messages to send automatically when new users join</p>
+        <h1>💌 Auto DM Saver</h1>
+        <p class="subtitle">Manage messages sent automatically to new users</p>
 
-        <!-- Bot Status -->
+        <!-- Status Bar -->
         <div class="status-bar">
             <div class="status-item">
                 <span class="status-dot <?php echo $botUsername ? 'on' : 'off'; ?>"></span>
@@ -387,7 +376,7 @@ $botUsername = checkBotStatus();
                             <div class="details">
                                 #<?php echo ($index + 1); ?> 
                                 <?php if ($msg['type'] === 'copy'): ?>
-                                    • from chat <?php echo htmlspecialchars($msg['from_chat_id']); ?>
+                                    • from chat <?php echo htmlspecialchars($msg['from_chat_id'] ?? 'unknown'); ?>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -419,7 +408,7 @@ $botUsername = checkBotStatus();
                 </form>
             <?php endif; ?>
             
-            <a href="<?php echo (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/'; ?>" target="_blank" class="btn btn-primary">
+            <a href="https://t.me/lose_recover_bot" target="_blank" class="btn btn-primary">
                 🚀 Open Bot
             </a>
         </div>
@@ -429,20 +418,17 @@ $botUsername = checkBotStatus();
             <h4>📌 How to Save Auto DM Messages</h4>
             <ol>
                 <li>Click <strong>"Turn ON Forwarding"</strong> button above</li>
-                <li>Go to your Telegram and <strong>forward</strong> any message to <strong>@<?php echo htmlspecialchars($botUsername ?: 'YourBot'); ?></strong></li>
+                <li>Go to your Telegram and <strong>forward</strong> any message to <strong>@lose_recover_bot</strong></li>
                 <li>The message will appear in the list above</li>
                 <li>Repeat for multiple messages (they will be sent in order)</li>
                 <li>Click <strong>"Turn OFF Forwarding"</strong> when done</li>
-                <li>When users join, they'll receive ALL saved messages</li>
             </ol>
             <p style="margin-top: 12px; font-size: 13px; color: rgba(255,255,255,0.4);">
-                💡 Supports: Text, Photos, Videos, Documents (APK), Audio, Stickers, etc.
+                💡 Supports: Text, Photos, Videos, Documents (APK), Audio, Stickers
             </p>
         </div>
 
-        <!-- Footer -->
-        <hr class="divider">
-        <div style="text-align: center; color: rgba(255,255,255,0.2); font-size: 12px;">
+        <div class="text-muted">
             Data stored in: <code><?php echo htmlspecialchars($dataFile); ?></code>
         </div>
     </div>
