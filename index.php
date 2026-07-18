@@ -67,7 +67,7 @@ function createFreshData() {
         'user_welcome_msg' => '🎉 <b>Welcome to the Network!</b>\n\nYou have successfully verified.',
         'user_join_msg' => '🎯 <b>New User Alert!</b>\n\n👤 {first_name}\n🆔 {user_id}',
         'pending_removal_items' => [],
-        'save_mode' => false // Toggle for save mode
+        'save_mode' => false
     ];
     file_put_contents($GLOBALS['dataFile'], json_encode($initialData, JSON_PRETTY_PRINT));
     return $initialData;
@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         echo "<li>Send <code>/admin</code> to @lose_recover_bot</li>";
         echo "<li>Click '💌 Manage Auto DM'</li>";
         echo "<li>Click '🔄 Turn ON Save Mode'</li>";
-        echo "<li><b>SEND ANY MESSAGE</b> to the bot (text, photo, video, APK)</li>";
+        echo "<li><b>SEND ANY MESSAGE</b> to the bot (text, photo, video, APK, etc.)</li>";
         echo "<li>The message will be saved automatically!</li>";
         echo "</ol>";
     }
@@ -392,7 +392,7 @@ function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
 }
 
 // ==========================================
-// 6. MESSAGE HANDLER - SAVE ANY MESSAGE
+// 6. MESSAGE HANDLER - FIXED NULL ISSUE
 // ==========================================
 
 function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmMessages, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers, &$saveMode) {
@@ -403,7 +403,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     if (!$chatId || !$userId) return;
 
     $isAdmin = in_array((string)$userId, $admins);
-    $saveMode = $botData['save_mode'] ?? false;
     $isInState = isset($botData['admin_states'][$userId]) || 
                  isset($botData['pending_channel_forward'][$userId]) || 
                  isset($botData['pending_folder_button'][$userId]) ||
@@ -424,8 +423,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                       isset($message['animation']);
         
         if ($hasContent) {
-            error_log("Save Mode ON - Saving message from user: " . $userId);
-            
             $savedData = saveMessageToDatabase($message, $botData, $dataFile);
             
             $reply = "✅ <b>Auto DM Message Saved!</b>\n\n";
@@ -654,6 +651,27 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
+    if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'confirm_reset') {
+        unset($botData['admin_states'][$userId]);
+        if (strtolower(trim($text)) === 'yes') {
+            $GLOBALS['botData'] = createFreshData();
+            $GLOBALS['channels'] = [];
+            $GLOBALS['folders'] = [];
+            $GLOBALS['folderButtons'] = [];
+            $GLOBALS['verifiedUsers'] = [];
+            $reply = "✅ <b>Bot Reset Successfully!</b>";
+        } else {
+            $reply = "❌ <b>Reset Cancelled</b>";
+        }
+        sendTelegramRequest('sendMessage', [
+            'chat_id' => $chatId,
+            'text' => applyPremiumEmojis($reply, $premiumEmojis),
+            'parse_mode' => 'HTML'
+        ], $botToken);
+        sendAdminPanel($chatId, $botToken);
+        return;
+    }
+
     // ==========================================
     // ADMIN STATE MACHINE
     // ==========================================
@@ -789,18 +807,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                     $reply = "✔️ " . $result;
                 } else {
                     $reply = "📌 <b>Invalid Format!</b>\n\nUse: url|Button Text|https://example.com|primary";
-                }
-                break;
-            case 'confirm_reset':
-                if (strtolower(trim($text)) === 'yes') {
-                    $GLOBALS['botData'] = createFreshData();
-                    $GLOBALS['channels'] = [];
-                    $GLOBALS['folders'] = [];
-                    $GLOBALS['folderButtons'] = [];
-                    $GLOBALS['verifiedUsers'] = [];
-                    $reply = "✅ <b>Bot Reset Successfully!</b>";
-                } else {
-                    $reply = "❌ <b>Reset Cancelled</b>";
                 }
                 break;
             default:
@@ -958,7 +964,7 @@ function handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $bot
 }
 
 // ==========================================
-// 8. AUTO DM MANAGEMENT
+// 8. AUTO DM MANAGEMENT - FIXED WITH SAVE MODE INFO
 // ==========================================
 
 function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
@@ -966,15 +972,22 @@ function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
     $saveMode = $botData['save_mode'] ?? false;
     
     $text = "💌 <b>Auto DM Messages Management</b>\n\n";
-    $text .= "📤 Save Mode: <b>" . ($saveMode ? '✅ ON' : '❌ OFF') . "</b>\n\n";
+    $text .= "📤 <b>Save Mode:</b> " . ($saveMode ? '✅ <b>ON</b>' : '❌ <b>OFF</b>') . "\n\n";
     
     if (empty($messages)) {
         $text .= "<i>No messages saved yet.</i>\n\n";
-        $text .= "📌 <b>How to save:</b>\n";
-        $text .= "1️⃣ Turn ON Save Mode below\n";
-        $text .= "2️⃣ <b>SEND ANY MESSAGE</b> to the bot\n";
-        $text .= "3️⃣ The message will be saved automatically\n\n";
-        $text .= "💡 <b>Supports:</b> Text, Photos, Videos, APK files, Audio, Stickers\n";
+        $text .= "📌 <b>How to save any message:</b>\n";
+        $text .= "1️⃣ Click '🔄 Turn ON Save Mode' below\n";
+        $text .= "2️⃣ <b>Send ANY message</b> to the bot:\n";
+        $text .= "   • 📝 Text messages\n";
+        $text .= "   • 📷 Photos\n";
+        $text .= "   • 🎬 Videos\n";
+        $text .= "   • 📦 APK/Documents\n";
+        $text .= "   • 🎵 Audio files\n";
+        $text .= "   • 🎨 Stickers\n";
+        $text .= "3️⃣ The message will be saved automatically\n";
+        $text .= "4️⃣ Click '🔄 Turn OFF Save Mode' when done\n\n";
+        $text .= "💡 <b>Note:</b> No forwarding needed! Just send any message directly.";
     } else {
         $text .= "<b>📨 Saved Messages:</b> " . count($messages) . "\n\n";
         foreach ($messages as $index => $msg) {
@@ -994,7 +1007,7 @@ function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
         $text .= "Example: <code>remove|1</code>\n\n";
     }
     
-    $text .= "💡 <b>Tip:</b> Use the <a href='save.php'>Web Interface</a>";
+    $text .= "💡 <b>Tip:</b> Use the <a href='save.php'>Web Interface</a> for easier management";
     
     $keyboard = [
         'inline_keyboard' => [
@@ -1003,7 +1016,7 @@ function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
                  'callback_data' => 'adm_toggle_save_mode', 'style' => $saveMode ? 'danger' : 'success']
             ],
             [
-                ['text' => '🗑️ Clear All', 'callback_data' => 'adm_clear_auto_dm', 'style' => 'danger'],
+                ['text' => '🗑️ Clear All Messages', 'callback_data' => 'adm_clear_auto_dm', 'style' => 'danger'],
                 ['text' => '🔙 Back to Panel', 'callback_data' => 'adm_back', 'style' => 'primary']
             ]
         ]
@@ -1255,7 +1268,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
     $isAdmin = in_array((string)$userId, $admins);
 
     // ==========================================
-    // TOGGLE SAVE MODE
+    // TOGGLE SAVE MODE - FIXED
     // ==========================================
     if ($data === 'adm_toggle_save_mode') {
         if (!$isAdmin) {
@@ -1268,10 +1281,12 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         $botData['save_mode'] = !($botData['save_mode'] ?? false);
         saveBotData($dataFile, $botData);
         $status = $botData['save_mode'] ? 'ON' : 'OFF';
+        
         sendTelegramRequest('answerCallbackQuery', [
             'callback_query_id' => $callbackQueryId,
             'text' => 'Save Mode turned ' . $status
         ], $botToken);
+        
         showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis);
         return;
     }
