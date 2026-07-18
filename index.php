@@ -13,12 +13,13 @@
  * - User welcome message (shows only once)
  * - Multi-admin support
  * - RESET FUNCTION - Reset bot to fresh state
+ * - MULTIPLE AUTO DM POSTS - Add multiple posts from admin panel
  */
 
 // ==========================================
 // 1. HARDCODED CONFIG - FRESH START
 // ==========================================
-$botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
+$botToken = "8924875631:AAHNwkdigSaAGpyYz9oWmYhH1dehvQguL3Y"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
 $defaultAdmin = "5157557268"; // Primary admin ID
 
@@ -31,24 +32,20 @@ $defaultFolders = [];
 $defaultSolvedPost = "https://t.me/NEXm2m/861";
 $defaultVerificationMsg = "✅ <b>Verification Successful!</b>\n\nYou have successfully joined all channels.\n\n<b>Access Granted!</b>\n\n📌 You can now use all bot features.";
 
-// AUTO DM POST LINKS - These will be sent as direct posts
-$defaultAutoDmPost1 = "https://t.me/NEXm2m/862";
-$defaultAutoDmPost2 = "https://t.me/NEXm2m/862";
-
 // JSON flat-file path
 $dataFile = __DIR__ . '/data6.json';
 
 // ==========================================
 // 2. FLAT-FILE DB LIFECYCLE - FRESH START
 // ==========================================
-function loadBotData($filePath, $defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg, $defAutoDm1, $defAutoDm2) {
+function loadBotData($filePath, $defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg) {
     if (!file_exists($filePath)) {
-        return createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg, $defAutoDm1, $defAutoDm2);
+        return createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg);
     }
     return json_decode(file_get_contents($filePath), true);
 }
 
-function createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg, $defAutoDm1, $defAutoDm2) {
+function createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg) {
     $initialData = [
         'admins' => [$defAdmin],
         'imageUrl' => $defImage,
@@ -67,8 +64,7 @@ function createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVer
         'welcome_buttons' => [],
         'processed_join_requests' => [],
         'pending_channel_forward' => [],
-        'auto_dm_post_1' => $defAutoDm1,
-        'auto_dm_post_2' => $defAutoDm2,
+        'auto_dm_posts' => [], // ARRAY FOR MULTIPLE AUTO DM POSTS
         'channel_invite_links' => [],
         'pending_edit_channel' => [],
         'current_folder' => '',
@@ -107,11 +103,11 @@ function createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVer
     return $initialData;
 }
 
-function resetBot($filePath, $defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg, $defAutoDm1, $defAutoDm2) {
+function resetBot($filePath, $defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg) {
     if (file_exists($filePath)) {
         unlink($filePath);
     }
-    return createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg, $defAutoDm1, $defAutoDm2);
+    return createFreshData($defAdmin, $defImage, $defChannels, $defSolved, $defVerifMsg);
 }
 
 function saveBotData($filePath, $data) {
@@ -119,7 +115,7 @@ function saveBotData($filePath, $data) {
 }
 
 // Load data
-$botData = loadBotData($dataFile, $defaultAdmin, $defaultImage, $defaultChannels, $defaultSolvedPost, $defaultVerificationMsg, $defaultAutoDmPost1, $defaultAutoDmPost2);
+$botData = loadBotData($dataFile, $defaultAdmin, $defaultImage, $defaultChannels, $defaultSolvedPost, $defaultVerificationMsg);
 
 // Extract variables
 $imageUrl       = $botData['imageUrl'];
@@ -130,8 +126,7 @@ $folders        = $botData['folders'] ?? [];
 $folderButtons  = $botData['folder_buttons'] ?? [];
 $welcomeMessage = $botData['welcome_message'] ?? '';
 $welcomeButtons = $botData['welcome_buttons'] ?? [];
-$autoDmPost1    = $botData['auto_dm_post_1'] ?? '';
-$autoDmPost2    = $botData['auto_dm_post_2'] ?? '';
+$autoDmPosts    = $botData['auto_dm_posts'] ?? []; // Multiple Auto DM posts
 $currentFolder  = $botData['current_folder'] ?? '';
 $verificationSuccessMsg = $botData['verification_success_msg'] ?? $defaultVerificationMsg;
 $aiResponses = $botData['ai_responses'] ?? [];
@@ -183,6 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo "<p>🎯 Referral Enabled: " . ($referralEnabled ? 'Yes' : 'No') . "</p>";
     echo "<p>👥 Registered Users: " . count($botData['registered'] ?? []) . "</p>";
     echo "<p>✅ Verified Users: " . count($verifiedUsers) . "</p>";
+    echo "<p>💌 Auto DM Posts: " . count($autoDmPosts) . "</p>";
     echo "<hr>";
     echo "<p><strong>To set up webhook, use:</strong></p>";
     echo "<code>https://api.telegram.org/bot" . $botToken . "/setWebhook?url=" . (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'] . "</code>";
@@ -198,13 +194,13 @@ if (!$update) {
 }
 
 if (isset($update['message'])) {
-    handleMessage($update['message'], $botToken, $imageUrl, $channels, $premiumEmojis, $admins, $botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmPost1, $autoDmPost2, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, $userJoinMsg, $verifiedUsers);
+    handleMessage($update['message'], $botToken, $imageUrl, $channels, $premiumEmojis, $admins, $botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmPosts, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, $userJoinMsg, $verifiedUsers);
 } elseif (isset($update['callback_query'])) {
     handleCallbackQuery($update['callback_query'], $botToken, $channels, $solvedPostLink, $premiumEmojis, $admins, $botData, $dataFile, $folders, $folderButtons, $verificationSuccessMsg, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, $verifiedUsers);
 } elseif (isset($update['chat_join_request'])) {
     $me = sendTelegramRequest('getMe', [], $botToken);
     $botUser = $me['result']['username'] ?? 'MyVerificationBot';
-    handleChatJoinRequest($update['chat_join_request'], $botToken, $botUser, $premiumEmojis, $admins, $botData, $dataFile, $autoDmPost1, $autoDmPost2);
+    handleChatJoinRequest($update['chat_join_request'], $botToken, $botUser, $premiumEmojis, $admins, $botData, $dataFile, $autoDmPosts);
 }
 
 http_response_code(200);
@@ -482,7 +478,99 @@ function processUnifiedRemove($chatId, $userId, $text, &$botData, $dataFile, $bo
 }
 
 // ==========================================
-// 7. MESSAGE & STATE MACHINE LOGIC
+// 7. MULTIPLE AUTO DM FUNCTIONS
+// ==========================================
+
+function showAutoDmPosts($chatId, $botToken, $botData, $premiumEmojis) {
+    $posts = $botData['auto_dm_posts'] ?? [];
+    $text = "💌 <b>Auto DM Posts Management</b>\n\n";
+    
+    if (empty($posts)) {
+        $text .= "<i>No Auto DM posts added yet.</i>\n\n";
+    } else {
+        $text .= "<b>Current Posts:</b>\n";
+        foreach ($posts as $index => $post) {
+            $text .= ($index + 1) . ". 🔗 " . htmlspecialchars($post) . "\n";
+        }
+        $text .= "\n";
+    }
+    
+    $text .= "📌 <b>How to add:</b>\n";
+    $text .= "Send the post link like:\n";
+    $text .= "<code>https://t.me/NEXm2m/862</code>\n\n";
+    $text .= "📌 <b>How to remove:</b>\n";
+    $text .= "Type: <code>remove|number</code>\n";
+    $text .= "Example: <code>remove|1</code>";
+    
+    $keyboard = [
+        'inline_keyboard' => [
+            [
+                ['text' => '🔙 Back to Panel', 'callback_data' => 'adm_back', 'style' => 'primary']
+            ]
+        ]
+    ];
+    
+    sendTelegramRequest('sendMessage', [
+        'chat_id' => $chatId,
+        'text' => applyPremiumEmojis($text, $premiumEmojis),
+        'parse_mode' => 'HTML',
+        'reply_markup' => $keyboard
+    ], $botToken);
+}
+
+function addAutoDmPost($chatId, $userId, $text, &$botData, $dataFile, $botToken, $premiumEmojis) {
+    $text = trim($text);
+    
+    // Check for remove command
+    if (strpos($text, 'remove|') === 0) {
+        $parts = explode('|', $text);
+        if (isset($parts[1])) {
+            $index = intval($parts[1]) - 1;
+            if (isset($botData['auto_dm_posts'][$index])) {
+                unset($botData['auto_dm_posts'][$index]);
+                $botData['auto_dm_posts'] = array_values($botData['auto_dm_posts']);
+                saveBotData($dataFile, $botData);
+                $reply = "✔️ <b>Auto DM Post removed successfully!</b>";
+            } else {
+                $reply = "📌 <b>Invalid post number!</b>";
+            }
+        } else {
+            $reply = "📌 <b>Invalid format!</b>\nUse: remove|1";
+        }
+        sendTelegramRequest('sendMessage', [
+            'chat_id' => $chatId,
+            'text' => applyPremiumEmojis($reply, $premiumEmojis),
+            'parse_mode' => 'HTML'
+        ], $botToken);
+        showAutoDmPosts($chatId, $botToken, $botData, $premiumEmojis);
+        return;
+    }
+    
+    // Validate Telegram post link
+    if (preg_match('~t\.me/([a-zA-Z0-9_]+)/(\d+)~', $text) || preg_match('~t\.me/c/(\d+)/(\d+)~', $text)) {
+        // Check if post already exists
+        if (!in_array($text, $botData['auto_dm_posts'])) {
+            $botData['auto_dm_posts'][] = $text;
+            saveBotData($dataFile, $botData);
+            $reply = "✔️ <b>Auto DM Post added successfully!</b>\n\n🔗 " . htmlspecialchars($text);
+        } else {
+            $reply = "📌 <b>Post already exists!</b>";
+        }
+    } else {
+        $reply = "📌 <b>Invalid Telegram post link!</b>\n\nPlease send a valid link like:\n<code>https://t.me/NEXm2m/862</code>";
+    }
+    
+    sendTelegramRequest('sendMessage', [
+        'chat_id' => $chatId,
+        'text' => applyPremiumEmojis($reply, $premiumEmojis),
+        'parse_mode' => 'HTML'
+    ], $botToken);
+    
+    showAutoDmPosts($chatId, $botToken, $botData, $premiumEmojis);
+}
+
+// ==========================================
+// 8. MESSAGE & STATE MACHINE LOGIC
 // ==========================================
 
 function applyPremiumEmojis($text, $premiumEmojis) {
@@ -493,7 +581,7 @@ function applyPremiumEmojis($text, $premiumEmojis) {
     return $text;
 }
 
-function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmPost1, $autoDmPost2, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers) {
+function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmPosts, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers) {
     $chatId = $message['chat']['id'] ?? null;
     $text = trim($message['text'] ?? '');
     $userId = $message['from']['id'] ?? null;
@@ -505,6 +593,13 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                  isset($botData['pending_channel_forward'][$userId]) || 
                  isset($botData['pending_folder_button'][$userId]) ||
                  isset($botData['pending_edit_channel'][$userId]);
+
+    // Handle Auto DM management (Admin only)
+    if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'manage_auto_dm') {
+        unset($botData['admin_states'][$userId]);
+        addAutoDmPost($chatId, $userId, $text, $botData, $dataFile, $botToken, $premiumEmojis);
+        return;
+    }
 
     if (!$isAdmin && !$isInState && strpos($text, '/') !== 0 && !empty($text)) {
         $response = getAIResponse($text, $aiResponses, $userId);
@@ -691,7 +786,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'confirm_reset') {
         unset($botData['admin_states'][$userId]);
         if (strtolower(trim($text)) === 'yes') {
-            $GLOBALS['botData'] = resetBot($dataFile, $GLOBALS['defaultAdmin'], $GLOBALS['defaultImage'], $GLOBALS['defaultChannels'], $GLOBALS['defaultSolvedPost'], $GLOBALS['defaultVerificationMsg'], $GLOBALS['defaultAutoDmPost1'], $GLOBALS['defaultAutoDmPost2']);
+            $GLOBALS['botData'] = resetBot($dataFile, $GLOBALS['defaultAdmin'], $GLOBALS['defaultImage'], $GLOBALS['defaultChannels'], $GLOBALS['defaultSolvedPost'], $GLOBALS['defaultVerificationMsg']);
             $GLOBALS['channels'] = [];
             $GLOBALS['folders'] = [];
             $GLOBALS['folderButtons'] = [];
@@ -792,16 +887,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
                 $botData['welcome_message'] = $text;
                 saveBotData($dataFile, $botData);
                 $reply = "✔️ Welcome message updated successfully.";
-                break;
-            case 'edit_auto_dm_1':
-                $botData['auto_dm_post_1'] = $text;
-                saveBotData($dataFile, $botData);
-                $reply = "✔️ Auto DM Post 1 updated successfully.";
-                break;
-            case 'edit_auto_dm_2':
-                $botData['auto_dm_post_2'] = $text;
-                saveBotData($dataFile, $botData);
-                $reply = "✔️ Auto DM Post 2 updated successfully.";
                 break;
             case 'edit_ai_response':
                 $parts = explode('|', $text, 2);
@@ -1006,7 +1091,7 @@ function getBotUsername($botToken) {
 }
 
 // ==========================================
-// 8. SHOW CURRENT FOLDER
+// 9. SHOW CURRENT FOLDER
 // ==========================================
 
 function showCurrentFolder($chatId, $botToken, $botData) {
@@ -1063,7 +1148,7 @@ function showCurrentFolder($chatId, $botToken, $botData) {
 }
 
 // ==========================================
-// 9. SHOW CHANNELS BY FOLDER
+// 10. SHOW CHANNELS BY FOLDER
 // ==========================================
 
 function showChannelsByFolder($chatId, $botToken, $botData, $folderName) {
@@ -1073,7 +1158,7 @@ function showChannelsByFolder($chatId, $botToken, $botData, $folderName) {
 }
 
 // ==========================================
-// 10. CALLBACK QUERIES HANDLING
+// 11. CALLBACK QUERIES HANDLING
 // ==========================================
 
 function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLink, $premiumEmojis, $admins, &$botData, $dataFile, $folders, $folderButtons, $verificationSuccessMsg, $referralEnabled, $referralRequired, $referralTarget, $userWelcomeMsg, &$verifiedUsers) {
@@ -1191,6 +1276,14 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 'text' => "📁 <b>Create New Folder</b>\n\nSend the name of the new folder:",
                 'parse_mode' => 'HTML'
             ], $botToken);
+            return;
+        }
+        
+        // MANAGE AUTO DM POSTS
+        if ($data === 'adm_manage_auto_dm') {
+            $botData['admin_states'][$userId] = 'manage_auto_dm';
+            saveBotData($dataFile, $botData);
+            showAutoDmPosts($chatId, $botToken, $botData, $premiumEmojis);
             return;
         }
         
@@ -1350,18 +1443,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 $promptText = "🔖 <b>Edit Welcome Message</b>\n\nSend the new welcome message.\n\nPlaceholders: {first_name}, {last_name}, {username}, {user_id}";
                 break;
                 
-            case 'adm_edit_auto_dm_1':
-                $botData['admin_states'][$userId] = 'edit_auto_dm_1';
-                saveBotData($dataFile, $botData);
-                $promptText = "💌 <b>Edit Auto DM Post 1</b>\n\nSend the new Auto DM post link:\n\nExample: https://t.me/NEXm2m/862";
-                break;
-                
-            case 'adm_edit_auto_dm_2':
-                $botData['admin_states'][$userId] = 'edit_auto_dm_2';
-                saveBotData($dataFile, $botData);
-                $promptText = "💌 <b>Edit Auto DM Post 2</b>\n\nSend the new Auto DM post link:\n\nExample: https://t.me/NEXm2m/862";
-                break;
-                
             case 'adm_edit_ai_response':
                 $botData['admin_states'][$userId] = 'edit_ai_response';
                 saveBotData($dataFile, $botData);
@@ -1445,7 +1526,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         }
 
         if ($allJoined) {
-            // AUTO VERIFY USER
             $isVerified = in_array((string)$userId, $verifiedUsers);
             if (!$isVerified) {
                 $verifiedUsers[] = (string)$userId;
@@ -1457,7 +1537,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             $lastName = isset($callbackQuery['from']['last_name']) ? ' ' . $callbackQuery['from']['last_name'] : '';
             $username = isset($callbackQuery['from']['username']) ? '@' . $callbackQuery['from']['username'] : 'None';
             
-            // Send user welcome message
             $userMsg = $userWelcomeMsg;
             $userMsg = str_replace('{first_name}', $firstName, $userMsg);
             $userMsg = str_replace('{last_name}', $lastName, $userMsg);
@@ -1470,7 +1549,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 'parse_mode' => 'HTML'
             ], $botToken);
 
-            // Send verification success
             $successText = $GLOBALS['verificationSuccessMsg'];
             $successText = str_replace('{first_name}', $firstName, $successText);
             $successText = str_replace('{last_name}', $lastName, $successText);
@@ -1488,7 +1566,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 'parse_mode' => 'HTML'
             ], $botToken);
 
-            // Send solved post (861)
             $postSent = attemptCopyMessage($chatId, $solvedPostLink, $botToken);
             if (!$postSent && !empty($solvedPostLink)) {
                 sendTelegramRequest('sendMessage', [
@@ -1503,7 +1580,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 ], $botToken);
             }
         } else {
-            // Show missing channels
             $listText = "";
             foreach ($missingChannels as $idx => $chan) {
                 $type = $chan['type'] ?? 'public';
@@ -1522,7 +1598,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
 }
 
 // ==========================================
-// 11. API AND UTILITY FUNCTIONS
+// 12. API AND UTILITY FUNCTIONS
 // ==========================================
 
 function sendTelegramRequest($method, $data = [], $token = '') {
@@ -1540,7 +1616,7 @@ function sendTelegramRequest($method, $data = [], $token = '') {
     return json_decode($response, true);
 }
 
-function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premiumEmojis, $admins, &$botData, $dataFile, $autoDmPost1, $autoDmPost2) {
+function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premiumEmojis, $admins, &$botData, $dataFile, $autoDmPosts) {
     $user = $chatJoinRequest['from'];
     $userId = $user['id'];
     $chatId = $chatJoinRequest['chat']['id'] ?? null;
@@ -1562,27 +1638,20 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
 
         $botUrl = "https://t.me/" . trim($botUsername) . "?start=join";
 
-        // SEND AUTO DM POST 1 - Direct post (862)
-        if (!empty($autoDmPost1)) {
-            $postSent1 = attemptCopyMessage($userId, $autoDmPost1, $botToken);
-            if (!$postSent1) {
-                sendTelegramRequest('sendMessage', [
-                    'chat_id' => $userId,
-                    'text' => "💌 Hello {first_name}!\n\n📌 Please view the verification post:\n" . $autoDmPost1,
-                    'parse_mode' => 'HTML'
-                ], $botToken);
-            }
-        }
-
-        // SEND AUTO DM POST 2 - Direct post (862)
-        if (!empty($autoDmPost2)) {
-            $postSent2 = attemptCopyMessage($userId, $autoDmPost2, $botToken);
-            if (!$postSent2) {
-                sendTelegramRequest('sendMessage', [
-                    'chat_id' => $userId,
-                    'text' => "🎯 Welcome {first_name}!\n\n📌 Click the link below to verify:\n" . $autoDmPost2,
-                    'parse_mode' => 'HTML'
-                ], $botToken);
+        // SEND ALL AUTO DM POSTS AS DIRECT MESSAGES
+        if (!empty($autoDmPosts)) {
+            foreach ($autoDmPosts as $postLink) {
+                $postSent = attemptCopyMessage($userId, $postLink, $botToken);
+                // If copy fails, send as link
+                if (!$postSent) {
+                    sendTelegramRequest('sendMessage', [
+                        'chat_id' => $userId,
+                        'text' => "💌 Here is your verification post:\n" . $postLink,
+                        'parse_mode' => 'HTML'
+                    ], $botToken);
+                }
+                // Small delay between messages to avoid rate limiting
+                usleep(500000); // 0.5 second delay
             }
         }
 
@@ -1604,7 +1673,7 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
                          "👤 <b>User:</b> " . $firstName . $lastName . "\n" .
                          "🆔 <b>User ID:</b> <code>" . $userId . "</code>\n" .
                          "🔗 <b>Username:</b> " . $username . "\n\n" .
-                         "☯️ <i>2 Auto DM posts sent to user.</i>";
+                         "☯️ <i>" . count($autoDmPosts) . " Auto DM posts sent to user.</i>";
             sendTelegramRequest('sendMessage', [
                 'chat_id' => $adm,
                 'text' => applyPremiumEmojis($adminText, $premiumEmojis),
@@ -1767,7 +1836,7 @@ function processCustomButtonInput($text, &$botData, $dataFile) {
 }
 
 // ==========================================
-// 12. ADMIN PANEL
+// 13. ADMIN PANEL
 // ==========================================
 
 function sendAdminPanel($chatId, $botToken) {
@@ -1795,8 +1864,7 @@ function sendAdminPanel($chatId, $botToken) {
                 ['text' => '🎯 Edit User Join', 'callback_data' => 'adm_edit_user_join', 'style' => 'primary']
             ],
             [
-                ['text' => '💌 Edit Auto DM 1', 'callback_data' => 'adm_edit_auto_dm_1', 'style' => 'primary'],
-                ['text' => '💌 Edit Auto DM 2', 'callback_data' => 'adm_edit_auto_dm_2', 'style' => 'primary']
+                ['text' => '💌 Manage Auto DM Posts', 'callback_data' => 'adm_manage_auto_dm', 'style' => 'primary']
             ],
             [
                 ['text' => '👤 Add Admin', 'callback_data' => 'adm_add_admin', 'style' => 'primary'],
@@ -1832,7 +1900,7 @@ function sendAdminPanel($chatId, $botToken) {
 }
 
 // ==========================================
-// 13. FULL INFO FUNCTION
+// 14. FULL INFO FUNCTION
 // ==========================================
 
 function showFullInfo($chatId, $botToken, $botData) {
@@ -1844,6 +1912,7 @@ function showFullInfo($chatId, $botToken, $botData) {
     $aiResponses = $botData['ai_responses'] ?? [];
     $referralEnabled = $botData['referral_enabled'] ?? true;
     $referralTarget = $botData['referral_target'] ?? 3;
+    $autoDmPosts = $botData['auto_dm_posts'] ?? [];
     
     $totalReferrals = 0;
     foreach ($botData['referrals'] ?? [] as $ref) {
@@ -1861,13 +1930,20 @@ function showFullInfo($chatId, $botToken, $botData) {
             "🤖 AI Responses: <b>" . count($aiResponses) . "</b>\n" .
             "🎯 Referral System: <b>" . ($referralEnabled ? '✅ ENABLED' : '❌ DISABLED') . "</b>\n" .
             "🎯 Referral Target: <b>" . $referralTarget . "</b> users\n" .
-            "👥 Total Referrals: <b>" . $totalReferrals . "</b>\n\n" .
+            "👥 Total Referrals: <b>" . $totalReferrals . "</b>\n" .
+            "💌 Auto DM Posts: <b>" . count($autoDmPosts) . "</b>\n\n" .
             "🖼️ <b>Image URL:</b>\n" . htmlspecialchars($botData['imageUrl']) . "\n\n" .
-            "🔑 <b>Solved Link:</b>\n" . htmlspecialchars($botData['solved_post_link']) . "\n\n" .
-            "💌 <b>Auto DM Post 1:</b>\n" . htmlspecialchars($botData['auto_dm_post_1'] ?? '') . "\n\n" .
-            "💌 <b>Auto DM Post 2:</b>\n" . htmlspecialchars($botData['auto_dm_post_2'] ?? '') . "\n\n" .
-            "👤 <b>Admins List:</b>\n";
+            "🔑 <b>Solved Link:</b>\n" . htmlspecialchars($botData['solved_post_link']) . "\n\n";
     
+    if (!empty($autoDmPosts)) {
+        $text .= "💌 <b>Auto DM Posts:</b>\n";
+        foreach ($autoDmPosts as $index => $post) {
+            $text .= ($index + 1) . ". 🔗 " . htmlspecialchars($post) . "\n";
+        }
+        $text .= "\n";
+    }
+    
+    $text .= "👤 <b>Admins List:</b>\n";
     foreach ($botData['admins'] as $index => $adm) {
         $text .= "• <code>" . $adm . "</code>\n";
     }
@@ -1922,12 +1998,13 @@ function showFullInfo($chatId, $botToken, $botData) {
 }
 
 // ==========================================
-// 14. INITIALIZATION CHECK
+// 15. INITIALIZATION CHECK
 // ==========================================
 
 error_log("Bot initialized with " . count($admins) . " admins, " . count($channels) . " channels, " . count($folders) . " folders, and " . count($folderButtons) . " folder buttons");
 error_log("Referral System: " . ($referralEnabled ? 'ENABLED' : 'DISABLED') . " | Target: " . $referralTarget);
 error_log("Total Users: " . count($botData['registered'] ?? []));
 error_log("Verified Users: " . count($botData['verified_users'] ?? []));
+error_log("Auto DM Posts: " . count($autoDmPosts));
 
 ?>
