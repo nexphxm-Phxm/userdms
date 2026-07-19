@@ -13,7 +13,7 @@
 // ==========================================
 $botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
-$admins = ["5157557268", "7177448473"];
+$admins = ["7177448473"];
 $defaultChannels = [];
 $defaultFolders = [];
 $defaultSolvedPost = "https://t.me/NEXm2m/861";
