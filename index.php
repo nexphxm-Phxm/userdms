@@ -12,6 +12,7 @@
 $botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
 $defaultAdmin = "5157557268";
+$secondAdmin = "7177448473"; // Add second admin here
 
 $defaultChannels = [];
 $defaultFolders = [];
