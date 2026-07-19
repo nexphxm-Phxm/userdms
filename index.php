@@ -24,44 +24,42 @@ $dataFile = __DIR__ . '/data5.json';
 // ==========================================
 
 function loadBotData($filePath) {
-    // Try main file first
-    if (file_exists($filePath)) {
-        $content = file_get_contents($filePath);
-        if ($content !== false) {
-            $data = json_decode($content, true);
-            if (is_array($data) && !empty($data)) {
-                // Ensure required keys exist
-                $default = createFreshData(true);
-                foreach ($default as $key => $value) {
-                    if (!array_key_exists($key, $data)) {
-                        $data[$key] = $value;
-                    }
-                }
-                return $data;
-            }
-        }
-        // Main file corrupt – try backup
-        $backupPath = dirname($filePath) . '/data5_backup.json';
-        if (file_exists($backupPath)) {
-            $backupContent = file_get_contents($backupPath);
-            if ($backupContent !== false) {
-                $data = json_decode($backupContent, true);
+    $readAndDecode = function($path) {
+        if (!file_exists($path)) return false;
+        for ($i = 0; $i < 5; $i++) {
+            $content = @file_get_contents($path);
+            if ($content !== false && trim($content) !== '') {
+                $data = json_decode($content, true);
                 if (is_array($data) && !empty($data)) {
-                    $default = createFreshData(true);
-                    foreach ($default as $key => $value) {
-                        if (!array_key_exists($key, $data)) {
-                            $data[$key] = $value;
-                        }
-                    }
-                    // Restore from backup
-                    saveBotData($filePath, $data);
-                    error_log("Data restored from backup: " . $filePath);
                     return $data;
                 }
             }
+            usleep(200000); // wait 200ms
         }
-        error_log("WARNING: Data file corrupt and no backup – creating fresh data for " . $filePath);
+        return false;
+    };
+
+    $data = $readAndDecode($filePath);
+    
+    if ($data === false) {
+        $backupPath = dirname($filePath) . '/data5_backup.json';
+        $data = $readAndDecode($backupPath);
+        if ($data !== false) {
+            error_log("Data restored from backup: " . $filePath);
+        }
     }
+    
+    if ($data !== false) {
+        $default = createFreshData(true);
+        foreach ($default as $key => $value) {
+            if (!array_key_exists($key, $data)) {
+                $data[$key] = $value;
+            }
+        }
+        return $data;
+    }
+    
+    error_log("WARNING: Data file corrupt and no backup – creating fresh data for " . $filePath);
     return createFreshData();
 }
 
@@ -108,15 +106,18 @@ function createFreshData($returnOnly = false) {
 }
 
 function saveBotData($filePath, $data) {
-    // Save main file
-    $result = file_put_contents($filePath, json_encode($data, JSON_PRETTY_PRINT));
+    $json = json_encode($data, JSON_PRETTY_PRINT);
+    if ($json === false) return false;
+    
+    // Save main file with lock to prevent corruption
+    $result = file_put_contents($filePath, $json, LOCK_EX);
     if ($result === false) {
         error_log("ERROR: Failed to write data file: " . $filePath);
         return false;
     }
-    // Also write backup
+    // Also write backup with lock
     $backupPath = dirname($filePath) . '/data5_backup.json';
-    file_put_contents($backupPath, json_encode($data, JSON_PRETTY_PRINT));
+    file_put_contents($backupPath, $json, LOCK_EX);
     return true;
 }
 
