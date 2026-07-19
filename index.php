@@ -20,20 +20,56 @@ $defaultVerificationMsg = "✅ <b>Verification Successful!</b>\n\nYou have succe
 $dataFile = __DIR__ . '/data5.json';
 
 // ==========================================
-// 2. DATABASE FUNCTIONS
+// 2. DATABASE FUNCTIONS (UPDATED)
 // ==========================================
+
 function loadBotData($filePath) {
-    if (!file_exists($filePath)) {
-        return createFreshData();
+    // Try main file first
+    if (file_exists($filePath)) {
+        $content = file_get_contents($filePath);
+        if ($content !== false) {
+            $data = json_decode($content, true);
+            if (is_array($data) && !empty($data)) {
+                // Ensure required keys exist (merge with default to prevent missing keys)
+                $default = createFreshData(true); // true = return default array without saving
+                foreach ($default as $key => $value) {
+                    if (!array_key_exists($key, $data)) {
+                        $data[$key] = $value;
+                    }
+                }
+                return $data;
+            }
+        }
+        // Main file corrupt – try backup
+        $backupPath = dirname($filePath) . '/data5_backup.json';
+        if (file_exists($backupPath)) {
+            $backupContent = file_get_contents($backupPath);
+            if ($backupContent !== false) {
+                $data = json_decode($backupContent, true);
+                if (is_array($data) && !empty($data)) {
+                    // Merge with defaults again
+                    $default = createFreshData(true);
+                    foreach ($default as $key => $value) {
+                        if (!array_key_exists($key, $data)) {
+                            $data[$key] = $value;
+                        }
+                    }
+                    // Restore from backup – also copy it back to main file?
+                    // We'll save it back to main to repair.
+                    saveBotData($filePath, $data);
+                    error_log("Data restored from backup: " . $filePath);
+                    return $data;
+                }
+            }
+        }
+        // If both fail, log and create fresh
+        error_log("WARNING: Data file corrupt and no backup – creating fresh data for " . $filePath);
     }
-    $data = json_decode(file_get_contents($filePath), true);
-    if (!$data) {
-        return createFreshData();
-    }
-    return $data;
+    // No file or both corrupt: create fresh
+    return createFreshData();
 }
 
-function createFreshData() {
+function createFreshData($returnOnly = false) {
     $initialData = [
         'admins' => ['5157557268', '7177448473'],
         'imageUrl' => 'https://t.me/NEXm2m/824',
@@ -68,17 +104,26 @@ function createFreshData() {
         'pending_removal_items' => [],
         'save_mode' => false
     ];
-    file_put_contents($GLOBALS['dataFile'], json_encode($initialData, JSON_PRETTY_PRINT));
+    if (!$returnOnly) {
+        // Save to file (also creates backup)
+        saveBotData($GLOBALS['dataFile'], $initialData);
+        error_log("Fresh data created for " . $GLOBALS['dataFile']);
+    }
     return $initialData;
 }
 
 function saveBotData($filePath, $data) {
-    file_put_contents($filePath, json_encode($data, JSON_PRETTY_PRINT));
+    // Save main file
+    $result = file_put_contents($filePath, json_encode($data, JSON_PRETTY_PRINT));
+    if ($result === false) {
+        error_log("ERROR: Failed to write data file: " . $filePath);
+        return false;
+    }
+    // Also write backup
+    $backupPath = dirname($filePath) . '/data5_backup.json';
+    file_put_contents($backupPath, json_encode($data, JSON_PRETTY_PRINT));
+    return true;
 }
-
-// Load data
-$botData = loadBotData($dataFile);
-
 // Extract variables
 $imageUrl       = $botData['imageUrl'];
 $solvedPostLink = $botData['solved_post_link'];
