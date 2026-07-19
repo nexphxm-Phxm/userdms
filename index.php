@@ -19,7 +19,7 @@ $defaultFolders = [];
 $defaultSolvedPost = "https://t.me/NEXm2m/861";
 $defaultVerificationMsg = "✅ <b>Verification Successful!</b>\n\nYou have successfully joined all channels.\n\n<b>Access Granted!</b>";
 
-$dataFile = __DIR__ . '/data6.json';
+$dataFile = __DIR__ . '/data5.json';
 
 // ==========================================
 // 2. DATABASE FUNCTIONS
