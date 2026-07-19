@@ -8,6 +8,7 @@
 
 // ==========================================
 // 1. HARDCODED CONFIG
+// ==========================================
 $botToken = "8814977950:AAEr7T-rHx3jE8Dj7zEKmsszORCUBy3_vF4"; 
 $defaultImage = "https://t.me/NEXm2m/824"; 
 $admins = ["5157557268", "7177448473"];
@@ -35,8 +36,6 @@ function loadBotData($filePath) {
 function createFreshData() {
     $initialData = [
         'admins' => ['5157557268', '7177448473'],
-    return $initialData;
-}
         'imageUrl' => 'https://t.me/NEXm2m/824',
         'channels' => [],
         'folders' => [],
