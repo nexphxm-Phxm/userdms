@@ -20,7 +20,7 @@ $defaultVerificationMsg = "✅ <b>Verification Successful!</b>\n\nYou have succe
 $dataFile = __DIR__ . '/data5.json';
 
 // ==========================================
-// 2. DATABASE FUNCTIONS (UPDATED)
+// 2. DATABASE FUNCTIONS (UPDATED WITH BACKUP)
 // ==========================================
 
 function loadBotData($filePath) {
@@ -30,8 +30,8 @@ function loadBotData($filePath) {
         if ($content !== false) {
             $data = json_decode($content, true);
             if (is_array($data) && !empty($data)) {
-                // Ensure required keys exist (merge with default to prevent missing keys)
-                $default = createFreshData(true); // true = return default array without saving
+                // Ensure required keys exist
+                $default = createFreshData(true);
                 foreach ($default as $key => $value) {
                     if (!array_key_exists($key, $data)) {
                         $data[$key] = $value;
@@ -47,25 +47,21 @@ function loadBotData($filePath) {
             if ($backupContent !== false) {
                 $data = json_decode($backupContent, true);
                 if (is_array($data) && !empty($data)) {
-                    // Merge with defaults again
                     $default = createFreshData(true);
                     foreach ($default as $key => $value) {
                         if (!array_key_exists($key, $data)) {
                             $data[$key] = $value;
                         }
                     }
-                    // Restore from backup – also copy it back to main file?
-                    // We'll save it back to main to repair.
+                    // Restore from backup
                     saveBotData($filePath, $data);
                     error_log("Data restored from backup: " . $filePath);
                     return $data;
                 }
             }
         }
-        // If both fail, log and create fresh
         error_log("WARNING: Data file corrupt and no backup – creating fresh data for " . $filePath);
     }
-    // No file or both corrupt: create fresh
     return createFreshData();
 }
 
@@ -105,7 +101,6 @@ function createFreshData($returnOnly = false) {
         'save_mode' => false
     ];
     if (!$returnOnly) {
-        // Save to file (also creates backup)
         saveBotData($GLOBALS['dataFile'], $initialData);
         error_log("Fresh data created for " . $GLOBALS['dataFile']);
     }
@@ -124,10 +119,14 @@ function saveBotData($filePath, $data) {
     file_put_contents($backupPath, json_encode($data, JSON_PRETTY_PRINT));
     return true;
 }
+
+// Load data
+$botData = loadBotData($dataFile);
+
 // Extract variables
-$imageUrl       = $botData['imageUrl'];
-$solvedPostLink = $botData['solved_post_link'];
-$admins         = $botData['admins'];
+$imageUrl       = $botData['imageUrl'] ?? $defaultImage;
+$solvedPostLink = $botData['solved_post_link'] ?? $defaultSolvedPost;
+$admins         = $botData['admins'] ?? ['5157557268', '7177448473'];
 $channels       = $botData['channels'] ?? [];
 $folders        = $botData['folders'] ?? [];
 $folderButtons  = $botData['folder_buttons'] ?? [];
@@ -336,6 +335,9 @@ function saveMessageToDatabase($message, &$botData, $dataFile) {
         $savedData = saveMessageContent($message);
     }
     
+    if (!isset($botData['auto_dm_messages'])) {
+        $botData['auto_dm_messages'] = [];
+    }
     $botData['auto_dm_messages'][] = $savedData;
     saveBotData($dataFile, $botData);
     
@@ -436,7 +438,7 @@ function sendAutoDmMessages($chatId, $autoDmMessages, $botToken) {
 }
 
 // ==========================================
-// 6. MESSAGE HANDLER - FIXED NULL ISSUE
+// 6. MESSAGE HANDLER
 // ==========================================
 
 function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis, $admins, &$botData, $dataFile, $welcomeMessage, $welcomeButtons, $autoDmMessages, $folders, $folderButtons, $verificationSuccessMsg, $aiResponses, $referralEnabled, $referralTarget, $userWelcomeMsg, $userJoinMsg, &$verifiedUsers, &$saveMode) {
@@ -449,10 +451,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     $isAdmin = in_array((string)$userId, $admins);
 
     // ==========================================
-    // BUG FIX: Check manage_auto_dm state FIRST (before save mode block).
-    // Previously this was checked AFTER save mode, which meant a 'remove|1'
-    // command sent while save mode was ON would be saved as an Auto DM message
-    // instead of being processed as a remove command.
+    // BUG FIX: Check manage_auto_dm state FIRST
     // ==========================================
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'manage_auto_dm') {
         unset($botData['admin_states'][$userId]);
@@ -464,8 +463,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         return;
     }
 
-    // $isInState excludes manage_auto_dm because that is now handled above.
-    // It only covers states that should block save mode.
     $isInState = isset($botData['admin_states'][$userId]) || 
                  isset($botData['pending_channel_forward'][$userId]) || 
                  isset($botData['pending_folder_button'][$userId]) ||
@@ -474,15 +471,10 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     // ==========================================
     // SAVE MODE - Save ANY message sent to bot
     // ==========================================
-    // Always read save_mode fresh from $botData to avoid stale-variable bug
     $currentSaveMode = $botData['save_mode'] ?? false;
-    // BUG FIX: For photo/video/document/sticker/animation messages, $text is ''
-    // (empty string). We must allow empty $text through (it is not a command).
-    // Previously: strpos('', '/') returns false, and false !== 0 is true in PHP,
-    // so it accidentally worked — but the correct, explicit check is below.
     $isNotCommand = empty($text) || strpos($text, '/') !== 0;
+    
     if ($isAdmin && $currentSaveMode && !$isInState && $isNotCommand) {
-        // Detect any content type
         $hasContent = isset($message['text']) || 
                       isset($message['photo']) || 
                       isset($message['video']) || 
@@ -521,10 +513,7 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         }
     }
 
-    // AUTO DM MANAGEMENT state is now handled above (before save mode).
-    // This block is intentionally removed to prevent duplicate handling.
-
-    // AI Response (only if not in save mode)
+    // AI Response
     if (!$isAdmin && !$isInState && strpos($text, '/') !== 0 && !empty($text)) {
         $response = getAIResponse($text, $aiResponses, $userId);
         sendTelegramRequest('sendMessage', [
@@ -543,6 +532,9 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         unset($botData['pending_folder_button'][$userId]);
         $link = trim($text);
         if (strpos($link, 't.me/addlist/') !== false || strpos($link, 'telegram.me/addlist/') !== false) {
+            if (!isset($botData['folder_buttons'])) {
+                $botData['folder_buttons'] = [];
+            }
             $botData['folder_buttons'][] = ['link' => $link, 'created_at' => time()];
             saveBotData($dataFile, $botData);
             $reply = "✔️ <b>Folder Button Created Successfully!</b>";
@@ -714,12 +706,14 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
     if ($isAdmin && isset($botData['admin_states'][$userId]) && $botData['admin_states'][$userId] === 'confirm_reset') {
         unset($botData['admin_states'][$userId]);
         if (strtolower(trim($text)) === 'yes') {
-            $GLOBALS['botData'] = createFreshData();
-            $GLOBALS['channels'] = [];
-            $GLOBALS['folders'] = [];
-            $GLOBALS['folderButtons'] = [];
-            $GLOBALS['verifiedUsers'] = [];
-            $reply = "✅ <b>Bot Reset Successfully!</b>";
+            // Reset but preserve admins and auto_dm_messages
+            $oldAdmins = $botData['admins'];
+            $oldAutoDm = $botData['auto_dm_messages'] ?? [];
+            $botData = createFreshData(true);
+            $botData['admins'] = $oldAdmins;
+            $botData['auto_dm_messages'] = $oldAutoDm;
+            saveBotData($dataFile, $botData);
+            $reply = "✅ <b>Bot Reset Successfully!</b>\n\n💌 Auto DM messages preserved.";
         } else {
             $reply = "❌ <b>Reset Cancelled</b>";
         }
@@ -892,7 +886,6 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
         $username = isset($message['from']['username']) ? '@' . htmlspecialchars($message['from']['username']) : 'None';
 
         $isExistingUser = isset($botData['registered'][$userId]) && $botData['registered'][$userId] === true;
-        $isVerified = in_array((string)$userId, $botData['verified_users'] ?? []);
         
         if (!$isExistingUser) {
             $botData['registered'][$userId] = true;
@@ -926,16 +919,13 @@ function handleMessage($message, $botToken, $imageUrl, $channels, $premiumEmojis
             }
         }
 
-        // BUG FIX: Always read auto_dm_messages fresh from $botData.
-        // The $autoDmMessages parameter is a snapshot from webhook dispatch time
-        // and will NOT include messages saved in the same session.
-        // Reading directly from $botData guarantees the latest saved messages are sent.
+        // Send Auto DM messages
         $freshAutoDm = $botData['auto_dm_messages'] ?? [];
         if (!empty($freshAutoDm)) {
             sendAutoDmMessages($chatId, $freshAutoDm, $botToken);
         }
 
-        // Then show channel buttons
+        // Show channel buttons
         $keyboard = buildKeyboardWithCustomButtons($channels, $welcomeButtons, $folderButtons, true);
         
         sendTelegramRequest('sendMessage', [
@@ -1028,7 +1018,7 @@ function handleReferralCommand($chatId, $userId, $botToken, $premiumEmojis, $bot
 }
 
 // ==========================================
-// 8. AUTO DM MANAGEMENT - FIXED WITH SAVE MODE INFO
+// 8. AUTO DM MANAGEMENT
 // ==========================================
 
 function showAutoDmMessages($chatId, $botToken, $botData, $premiumEmojis) {
@@ -1175,14 +1165,7 @@ function showUnifiedRemoveList($chatId, $botToken, $botData, $premiumEmojis) {
     $text .= "\n📌 <i>Warning: Removing a folder removes its assignment from channels.</i>";
     
     $botData['pending_removal_items'] = $items;
-    // BUG FIX: was using $chatId instead of $userId as the state key
-    // The message handler looks up admin_states[$userId], so must use $userId here.
-    // showUnifiedRemoveList is always called from admin context so $chatId == $userId in private chats,
-    // but we extract $userId from the function's context via $chatId (they're the same in DM).
-    // We store under $chatId which equals userId in private chat — kept for DM bots, but
-    // renamed variable to make intent clear.
-    $adminUserId = $chatId; // In private DM bots, chatId === userId
-    $botData['admin_states'][$adminUserId] = 'remove_item';
+    $botData['admin_states'][$chatId] = 'remove_item';
     saveBotData($GLOBALS['dataFile'], $botData);
     
     sendTelegramRequest('sendMessage', [
@@ -1339,7 +1322,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
     $isAdmin = in_array((string)$userId, $admins);
 
     // ==========================================
-    // TOGGLE SAVE MODE - FIXED
+    // TOGGLE SAVE MODE
     // ==========================================
     if ($data === 'adm_toggle_save_mode') {
         if (!$isAdmin) {
@@ -1351,10 +1334,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         }
         $botData['save_mode'] = !($botData['save_mode'] ?? false);
         
-        // BUG FIX: When Save Mode is turned ON, clear the 'manage_auto_dm' admin
-        // state so that subsequent messages are captured by the save-mode handler
-        // (line ~440) instead of being intercepted by the manage_auto_dm handler
-        // (line ~413), which was causing "save message not working".
         if ($botData['save_mode']) {
             unset($botData['admin_states'][$userId]);
         }
@@ -1469,10 +1448,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
         // AUTO DM MANAGEMENT BUTTON
         // ==========================================
         if ($data === 'adm_manage_auto_dm') {
-            // BUG FIX: Only set manage_auto_dm state when Save Mode is OFF.
-            // If Save Mode is ON, we must NOT set this state, because it would
-            // intercept every subsequent message (treating it as a remove command)
-            // instead of allowing the save-mode handler to capture it.
             if (!($botData['save_mode'] ?? false)) {
                 $botData['admin_states'][$userId] = 'manage_auto_dm';
                 saveBotData($dataFile, $botData);
@@ -1667,7 +1642,7 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 return;
                 
             case 'adm_reset_bot':
-                $confirmText = "⚠️ <b>⚠️ DANGER: Reset Bot ⚠️</b>\n\nThis will <b>PERMANENTLY DELETE</b> all data:\n❌ All channels\n❌ All folders\n❌ All users\n❌ All referrals\n❌ All verification data\n\n📌 <b>Type 'yes' to confirm reset</b>";
+                $confirmText = "⚠️ <b>⚠️ DANGER: Reset Bot ⚠️</b>\n\nThis will <b>PERMANENTLY DELETE</b> all data:\n❌ All channels\n❌ All folders\n❌ All users\n❌ All referrals\n❌ All verification data\n\n💌 Auto DM messages will be preserved.\n\n📌 <b>Type 'yes' to confirm reset</b>";
                 $botData['admin_states'][$userId] = 'confirm_reset';
                 saveBotData($dataFile, $botData);
                 sendTelegramRequest('sendMessage', [
@@ -1742,10 +1717,8 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
             
             $firstName = $callbackQuery['from']['first_name'] ?? 'User';
             
-            // BUG FIX: only send userWelcomeMsg if it is not empty
-            $userMsg = $userWelcomeMsg;
-            $userMsg = str_replace('{first_name}', $firstName, $userMsg);
-            if (!empty(trim($userMsg))) {
+            if (!empty(trim($userWelcomeMsg))) {
+                $userMsg = str_replace('{first_name}', $firstName, $userWelcomeMsg);
                 sendTelegramRequest('sendMessage', [
                     'chat_id' => $chatId,
                     'text' => applyPremiumEmojis($userMsg, $premiumEmojis),
@@ -1753,8 +1726,6 @@ function handleCallbackQuery($callbackQuery, $botToken, $channels, $solvedPostLi
                 ], $botToken);
             }
 
-            // BUG FIX: $GLOBALS['verificationSuccessMsg'] was never set as a global.
-            // Use the local function parameter $verificationSuccessMsg instead.
             $successText = $verificationSuccessMsg;
             $successText = str_replace('{first_name}', $firstName, $successText);
 
@@ -1815,8 +1786,6 @@ function sendTelegramRequest($method, $data = [], $token = '') {
 }
 
 function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premiumEmojis, $admins, &$botData, $dataFile, $autoDmMessages) {
-    // BUG FIX: Always read auto_dm_messages fresh from $botData so newly saved
-    // messages are included, not just the stale snapshot passed at webhook dispatch time.
     $autoDmMessages = $botData['auto_dm_messages'] ?? $autoDmMessages;
     $user = $chatJoinRequest['from'];
     $userId = $user['id'];
@@ -1833,12 +1802,10 @@ function handleChatJoinRequest($chatJoinRequest, $botToken, $botUsername, $premi
     saveBotData($dataFile, $botData);
     
     if (!$isRegistered) {
-        // Send Auto DM messages
         if (!empty($autoDmMessages)) {
             sendAutoDmMessages($userId, $autoDmMessages, $botToken);
         }
 
-        // Show channel buttons
         $keyboard = buildKeyboardWithCustomButtons($botData['channels'] ?? [], $botData['welcome_buttons'] ?? [], $botData['folder_buttons'] ?? [], true);
         sendTelegramRequest('sendMessage', [
             'chat_id' => $userId,
